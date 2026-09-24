@@ -12,6 +12,13 @@ answer cache per run, canaries, a scan after every run) and records backend cost
 cache hits apart; the runner is `scripts/pilot_r4/`. It is a pilot: both arms answer the same
 tasks and neither figure is confirmatory.
 
+The [paired study harness](STUDY.md) is where the pilot's four faults stop recurring: eight tasks
+over repositories `evals/` does not use, each pinned by sha and each answered by a commit hash, a
+path or a branch name; a control arm with the same tools and no restriction; a Seatbelt profile
+around the agent process itself, so `cd` buys nothing and the built-in file tools are confined
+too; and a scorer that reads arm-free records. Its twelve validation runs, its own faults and the
+price of the full run are in that page. The runner is `scripts/study/`.
+
 Does jevify help a coding agent that already has `grep`, can read files and knows the usual
 command-line tools? Two experiments. The first gives an agent one question about a text (`why`,
 `is`). The second gives it a seven-step job where it has to choose tools (`run`). Few runs per
