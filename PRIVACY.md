@@ -66,15 +66,23 @@ JWTs) in semantic state and questions as `[REDACTED]`. Opaque option IDs remain 
 Masking is best effort, not a guarantee: do not send secrets to a backend you do not trust.
 jevify never prints or logs your API key. Use `TYPESAFE_API_KEY_FILE=/path/to/key`.
 
-## Two stores
+## Four stores in the cache directory
 
 The base directory is `JEVIFY_CACHE_DIR`, or the platform cache directory's `jevify` directory:
-`~/Library/Caches/jevify` on macOS; `$XDG_CACHE_HOME/jevify` or `~/.cache/jevify` on Linux.
+`~/Library/Caches/jevify` on macOS; `$XDG_CACHE_HOME/jevify` or `~/.cache/jevify` on Linux. Four
+stores live there. They hold different things, and different switches stop them.
 
-| Store | Contents | Retention | Disable |
-|:---|:---|:---|:---|
-| Answer cache | answers and probabilities, keyed by a hash of the redacted request | answers expire after seven days; expiry does not reclaim files | `--no-cache` or `JEVIFY_NO_CACHE=1` |
-| Saved inputs, `outputs/<blake3-16>.log` | full raw input bytes, secrets included | seven days; a save deletes the store's own files past it | `--no-save` on `why` and `filter`, or `JEVIFY_NO_SAVE=1` |
+| Store | Written by | Contents | Retention | Disable |
+|:---|:---|:---|:---|:---|
+| Answer cache, `answers/<2 hex>/<blake3>.json` | every verb that asks: `fill`, `pick`, `why`, `route`, `filter`, `label`, `is`, `add`, `sort` | the answer alone: the answering model's name, and per question a probability, the chosen option and a probability per option. No record text, no file excerpt, no path and no question text. Options are the opaque IDs the request used (`L000`, `D000`, `NONE`); on `label` they are the labels you passed on the command line, and on `filter` its three fixed phrases. The request survives only as the hash in the file name | entries are ignored after seven days; nothing deletes the files | `--no-cache` or `JEVIFY_NO_CACHE=1` |
+| Saved inputs, `outputs/<blake3-16>.log` | `why`, `filter` | full raw input bytes, secrets included, not redacted | seven days; a save deletes the store's own files past it | `--no-save` on `why` and `filter`, or `JEVIFY_NO_SAVE=1` |
+| Tool inventory, `inventory-<fingerprint>.json` | `route`, and the `tool` kind of `fill` and `pick --from` | the names and man-page one-line summaries of the executables on your PATH; no user text | none: the file is never expired or deleted, and a changed PATH writes a new file under a new fingerprint | `--no-cache` or `JEVIFY_NO_CACHE=1` stops `route` from writing it. The `tool` kind reads `JEVIFY_CACHE_DIR` directly and writes the file even then; with that variable unset it writes nothing and rebuilds the inventory each run |
+| `sort` recovery journal, `sort-undo-<stamp>-<pid>-<n>.jsonl` | `sort --apply` | absolute source and destination path bytes, and the device and inode of each moved file; no file content, and nothing in it is sent to a model | none: kept for `--undo`, removed only by hand | nothing turns it off. Under `--no-cache` it is written to the system temporary directory (`TMPDIR`) instead, where the same bytes live outside the cache directory |
+
+A cache hit replays the stored answer and sends nothing: `meta.cache_hits` counts it while
+`meta.requests` stays at zero. Because an entry holds no record text, a cache directory that
+outlives the input it came from retains the judgment, not the text that was judged. Every verb that
+asks a question caches, so `--no-cache` and `--no-save` are not substitutes for each other.
 
 Only `why` and `filter` save inputs; `label` saves nothing. They save before the first inference request, with directory
 mode 0700 and file mode 0600. Identical input has the same content-addressed path, and saving it
@@ -95,10 +103,9 @@ it is true when the raw input reached the store. On `filter` it is true when the
 every record and the raw input reached the store. How many records got a judgment is `unsure`
 against `total`, and how many lines `why` considered is `considered` against `total`.
 
-The answer cache never crosses backend, endpoint or decision-contract versions. Tool inventory
-and `sort` recovery journals also use the cache directory. Recovery journals retain local
-absolute path bytes and file identity for undo; they are not sent to the model. Preserve journals
-needed for recovery. Concurrent replacement of source files while sorting is unsupported.
+The answer cache never crosses backend, endpoint, model or decision-contract versions: each is
+part of the hashed request. Preserve journals needed for recovery. Concurrent replacement of
+source files while sorting is unsupported.
 
 ## Backend limits and handling
 

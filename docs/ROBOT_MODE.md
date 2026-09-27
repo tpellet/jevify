@@ -98,7 +98,9 @@ argument; unchecked substitution can turn abstention into an empty argument.
 - `sort <DIR> [--into ROOT] [--apply | --undo LOG]` proposes existing folders.
   Data: `moves[{from,to,p}]`, `skipped[{file,reason}]`, `undo_log`, `applied`. Exit 0 success,
   3 nothing placed or restored, 6 input error. Moves require `--apply` or `--undo`; no prompt.
-  Atomic no-replace moves and a unique JSONL recovery journal protect occupied destinations.
+  Atomic no-replace moves and a unique JSONL recovery journal protect occupied destinations; the
+  journal holds absolute path bytes and file identity, is never expired, and goes to the system
+  temporary directory rather than the cache directory under `--no-cache`.
   Symlink entries are skipped; same volume only; concurrent source replacement unsupported.
 - `capabilities` prints commands, flags, data fields, exit codes, environment and limits.
 - `robot-docs [guide|commands|exit-codes|examples|privacy]` prints `topic` and `text` in machine mode.
@@ -409,7 +411,13 @@ it wherever a wrong one costs something. Candidate order is part of the question
 answer cache hides the spread by replaying the first answer, so it surfaces when two callers
 race the same query cold.
 
-Outbound secret masking is best effort. Answer cache keys use redacted requests, expire after
-seven days and never cross backend, endpoint or decision-contract versions. Raw saved inputs
-are a separate store, bounded by the same seven days and turned off by `JEVIFY_NO_SAVE=1`.
+Outbound secret masking is best effort. Answer cache keys use redacted requests, are ignored after
+seven days and never cross backend, endpoint, model or decision-contract versions; the value is
+the answer alone (model name, probabilities, chosen option), never record text, and expiry deletes
+no files. Every verb that asks a question caches, and only `--no-cache` or `JEVIFY_NO_CACHE=1`
+stops it. Raw saved inputs are a separate store, written only by `why` and `filter`, bounded by
+the same seven days and turned off by `JEVIFY_NO_SAVE=1`. Two more files share the cache
+directory and outlive both bounds: `route`'s tool inventory, which `--no-cache` stops while the
+`tool` kind's copy of it reads `JEVIFY_CACHE_DIR` directly and is written even then, and
+`sort --apply`'s recovery journal. See `capabilities.answer_cache`.
 Neither telemetry nor diagnostics prints credentials.

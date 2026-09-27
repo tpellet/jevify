@@ -119,6 +119,21 @@ pub fn capabilities() -> Outcome {
         "why": "830 (1,000 lines) to 5,000 (at most 99)",
         "route": "about 380 over a PATH of 1,883 commands"
     });
+    // The other store under the cache directory: what a cached answer holds, which is the answer
+    // and never the record it judged, and the two files that share the directory with it.
+    let answer_cache = serde_json::json!({
+        "verbs": ["fill", "pick", "why", "route", "filter", "label", "is", "add", "sort"],
+        "directory": "JEVIFY_CACHE_DIR/answers/<2 hex>/<blake3>.json, or the platform cache directory/jevify/answers",
+        "key": "blake3 of the redacted request, which names the decision contract, endpoint, backend and model, so an entry never crosses any of them",
+        "contents": "the answer alone: the answering model's name, and per question a probability, the chosen option and a probability per option. No record text, no file excerpt, no path and no question text; options are the request's opaque ids (L000, D000, NONE), the labels passed to label, or filter's three fixed phrases",
+        "retention": "entries are ignored after 7 days; nothing deletes the files",
+        "disable": "--no-cache for one call, JEVIFY_NO_CACHE=1 for every call (both independent of --no-save); it also stops route's tool inventory file, but not the tool kind's",
+        "hit": "replays the stored answer and sends nothing: meta.cache_hits counts it, meta.requests stays at 0",
+        "other_files_in_the_directory": {
+            "inventory": "inventory-<fingerprint>.json: names and man-page one-line summaries of the executables on PATH, written by route and by the tool kind of fill and pick --from; never expired. --no-cache stops route from writing it; the tool kind reads JEVIFY_CACHE_DIR directly and writes it even then, and writes nothing when that variable is unset",
+            "sort_journal": "sort-undo-<stamp>-<pid>-<n>.jsonl, written by sort --apply: absolute source and destination path bytes with each file's device and inode, no file content, never sent to a model, never expired, and written to the system temporary directory instead when --no-cache is given"
+        }
+    });
     let data = serde_json::json!({
         "name": "jevify",
         "version": env!("CARGO_PKG_VERSION"),
@@ -194,7 +209,7 @@ pub fn capabilities() -> Outcome {
             { "name": "JEVIFY_STATUS_FILE", "meaning": "path fill writes its exec status to before starting a command: see exec_status. Unset by default, and nothing is written then" },
             { "name": "JEVIFY_CACHE_DIR", "default": "platform cache dir/jevify" },
             { "name": "JEVIFY_CONFIG_DIR", "default": "platform config dir/jevify", "meaning": "where the user's kinds.jsonl lives; read only for a kind that is neither coded nor shipped" },
-            { "name": "JEVIFY_NO_CACHE", "meaning": "disable the answer cache (entries expire after 7 days anyway); it does not disable saved inputs" },
+            { "name": "JEVIFY_NO_CACHE", "meaning": "disable the answer cache and route's tool inventory file (answer entries are ignored after 7 days anyway, but their files stay); it does not disable saved inputs or the tool kind's inventory file, and it moves sort --apply's recovery journal to the system temporary directory rather than suppressing it. See answer_cache" },
             { "name": "JEVIFY_NO_SAVE", "meaning": "set to 1 so why and filter save no raw input anywhere in a fleet, without every call site passing --no-save; saved_input is null and complete false" },
             { "name": "JEVIFY_DECISION", "meaning": "round_one: add meta.decision.round_one, every candidate of every window of round one and the finals as sent, to the envelope of a verb that ran a tournament" },
             { "name": "JEVIFY_PRICE_PER_MTOK", "default": 0.042 },
@@ -202,6 +217,7 @@ pub fn capabilities() -> Outcome {
             { "name": "JEVIFY_CNF", "meaning": "enable the command-not-found hook from `jevify init`" }
         ],
         "limits": { "choice_options": 255, "window": crate::tournament::WINDOW, "state_tokens": 32000, "request_tokens": 64000, "requests_per_minute": 1200, "tokens_per_second": 250000, "stdin_bytes": crate::input::MAX_BYTES, "pick_lines": crate::cmd::pick::MAX_LINES, "distinct_records": 20000, "records_per_request": { "classifier": crate::jev::classifier::KEYLESS_DECISIONS, "typesafe": 20 }, "too_many": "exit 6, error.kind too_many: narrow distinct records with grep or head", "connect_timeout_s": 5, "request_read_timeout_s": 60, "timeouts": "one request waits 5 s for the connection and 60 s for the response, then counts as a transport failure and is retried within the JEVIFY_DEADLINE budget; a truncated response costs the full 60 s" },
+        "answer_cache": answer_cache,
         "saved_inputs": { "verbs": ["why", "filter"], "directory": "JEVIFY_CACHE_DIR/outputs, or the platform cache directory/jevify/outputs", "filename": "<blake3-16>.log", "contents": "raw input bytes, secrets included", "retention": "7 days, matching the answer cache; a save deletes the store's own files past it and nothing else, never descending or following a symlink, and saving the same input again refreshes its file", "disable": "--no-save for one call, JEVIFY_NO_SAVE=1 for every call (both independent of --no-cache)", "permissions": "directory 0700, file 0600", "incomplete": "failed or skipped save: saved_input null, complete false" },
         "backends": [
             { "name": "typesafe", "key": "required", "model": "Jev", "window": Backend::Typesafe.window(), "choice_options": 255, "state_chars": "32k tokens", "requests_per_minute": 1200, "meta": "input_tokens is null unless every inference attempt reports usage; cost_usd estimates input-token cost at the configured price and is null when that basis is incomplete" },
