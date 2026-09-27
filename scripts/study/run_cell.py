@@ -1,7 +1,16 @@
 #!/usr/bin/env python3
 """Run one cell of the paired study: one task, one arm, one repetition.
 
-    python3 scripts/study/run_cell.py --task S1 --arm with --rep 1
+    python3 scripts/study/run_cell.py --task D1 --arm available --rep 1
+
+Three arms, never averaged together:
+
+    control    jevify is not installed and the prompt says so
+    available  jevify is installed, the prompt mentions it once and hands over its
+               own documentation; whether the agent reaches for it is the
+               measurement
+    required   the same, plus one sentence telling the agent to use it for the
+               step that chooses among candidates
 
 A cell is a headless Claude Code agent answering one task inside a Seatbelt
 sandbox. The sandbox wraps the agent process itself, so every child process and
@@ -23,7 +32,9 @@ Layout, all outside the repository, under $JEVSTUDY (default ~/jevify-study):
         jevify.jsonl        one line per jevify call: argv, exit, envelope meta
         meta.json           cost and adoption figures for this cell
         answer.txt          the ANSWER: line the agent printed
-        escapes.txt         files written outside the run directory
+        claude-config/      this cell's own CLAUDE_CONFIG_DIR, with --per-run-config
+        mtime_moved.txt     paths outside the run whose mtime moved (a smoke test,
+                            not write attribution: see scan())
 
 The gold answers live in the repository, which the profile denies reading, so a
 run cannot read the answer it is being scored against.
@@ -59,6 +70,7 @@ PROFILE = """(version 1)
 (deny file-write*)
 (allow file-write* (subpath "{run}"))
 (allow file-write* (subpath "{claude_home}"))
+{claude_read_denies}
 (allow file-write* (subpath "{scratch}"))
 (allow file-write* (subpath "{tmpdir}"))
 (allow file-write* (subpath "/dev"))
@@ -87,12 +99,18 @@ PROFILE = """(version 1)
 {arm}
 """
 
-WITH_ARM = """(allow file-read* (literal "{study}/bin/jevify"))
+# The three arms differ in the profile by exactly these two lines, and in the
+# prompt by exactly one paragraph. `available` and `required` get the same
+# profile; what separates them is what the prompt says, which is the whole point
+# of having both.
+ALLOW_JEVIFY = """(allow file-read* (literal "{study}/bin/jevify"))
 (allow process-exec* (literal "{study}/bin/jevify"))
 """
-WITHOUT_ARM = """(deny file-read* (literal "{study}/bin/jevify"))
+DENY_JEVIFY = """(deny file-read* (literal "{study}/bin/jevify"))
 (deny process-exec* (literal "{study}/bin/jevify"))
 """
+ARMS = ("control", "available", "required")
+HAS_JEVIFY = {"control": False, "available": True, "required": True}
 
 HEAD = """You are answering one question about a local git repository. Work read-only.
 
@@ -104,14 +122,26 @@ and <value> must be {answer_format} and nothing else. No backticks, no prose on
 that line. If you cannot find it, write ANSWER: unknown.
 """
 
-WITH_DOC = """
+# `available` is the paragraph a real integrator writes: the tool exists, here is
+# where it is, here is its own documentation. Nothing in it argues for the tool
+# or hints that this task is one it suits. Whether the agent reaches for it is
+# the measurement, so the paragraph must not do the reaching.
+AVAILABLE_DOC = """
 The command-line tool jevify is installed at {jevify}. Call it by that full path.
 Its documentation for agents follows.
 
 {block}
 """
 
-WITHOUT_DOC = """
+# `required` is the same paragraph plus one instruction. It answers a different
+# question -- does the tool help when it is used -- and its number must never be
+# read as an adoption figure.
+REQUIRED_DOC = AVAILABLE_DOC + """
+For this task you must use jevify for the step that chooses among candidates.
+Run it at least once and let what it returns decide your answer.
+"""
+
+CONTROL_DOC = """
 The tool jevify is not installed on this machine.
 """
 
@@ -120,7 +150,7 @@ def sh(*a, **kw):
     return subprocess.run(a, capture_output=True, text=True, **kw)
 
 
-def build(task_id, arm, rep, model):
+def build(task_id, arm, rep, model, per_run_config=False):
     t = TASKS[task_id]
     rid = f"{task_id}-{arm}-r{rep}"
     run = STUDY / "runs" / rid
@@ -149,15 +179,27 @@ def build(task_id, arm, rep, model):
     (run / "jevify.jsonl").write_text("")
     scratch = pathlib.Path("/private/tmp/claude-501") / ("-" + str(run / "work").strip("/").replace("/", "-"))
     scratch.mkdir(parents=True, exist_ok=True)
-    arm_rules = (WITH_ARM if arm == "with" else WITHOUT_ARM).format(study=STUDY)
+    arm_rules = (ALLOW_JEVIFY if HAS_JEVIFY[arm] else DENY_JEVIFY).format(study=STUDY)
+    if per_run_config:
+        claude_home = run / "claude-config"
+        claude_home.mkdir(parents=True, exist_ok=True)
+        seed_claude_config(claude_home)
+        claude_read_denies = ""
+    else:
+        claude_home = HOME / ".claude"
+        claude_read_denies = "\n".join(
+            f'(deny file-read* (subpath "{claude_home / n}"))' if (claude_home / n).is_dir()
+            else f'(deny file-read* (literal "{claude_home / n}"))'
+            for n in SHARED_CLAUDE_DENY)
     siblings = "\n".join(f'(deny file-read-data (subpath "{d}"))'
                          for d in sorted((STUDY / "runs").iterdir()) if d != run and d.is_dir())
     (run / "profile.sb").write_text(PROFILE.format(
-        run=run, claude_home=HOME / ".claude", scratch=scratch, tmpdir=run / "tmp",
+        run=run, claude_home=claude_home, claude_read_denies=claude_read_denies,
+        scratch=scratch, tmpdir=run / "tmp",
         repo=REPO, study=STUDY, home=HOME, arm=arm_rules, siblings=siblings))
 
     prompt = HEAD.format(answer_format=t["answer_format"])
-    if arm == "with":
+    if HAS_JEVIFY[arm]:
         wrapper = run / "bin" / "jevify"
         wrapper.write_text(
             "#!/bin/sh\n"
@@ -165,12 +207,63 @@ def build(task_id, arm, rep, model):
             f'JEVIFY_CACHE_DIR="{run}/cache" exec python3 "{STUDY}/bin/jevify_log.py" "$@"\n')
         wrapper.chmod(0o755)
         block = (STUDY / "bin" / "init-agents.txt").read_text().strip()
-        prompt += WITH_DOC.format(jevify=wrapper, block=block)
+        prompt += (REQUIRED_DOC if arm == "required" else AVAILABLE_DOC).format(
+            jevify=wrapper, block=block)
     else:
-        prompt += WITHOUT_DOC
+        prompt += CONTROL_DOC
     prompt += "\nTask: " + t["question"].format(repo=dst) + "\n"
     (run / "prompt.txt").write_text(prompt)
-    return t, run, rid
+    return t, run, rid, claude_home
+
+
+# The four keys the CLI needs in its configuration directory to consider itself
+# set up and signed in. The OAuth token itself lives in the Keychain, not here.
+# Only these four are copied: the operator's own ~/.claude.json holds project
+# paths, MCP server definitions and history, and a run can read its own
+# configuration directory, so copying the whole file would hand all of that to
+# the agent under test.
+CONFIG_SEED_KEYS = ("oauthAccount", "userID", "hasCompletedOnboarding", "lastOnboardingVersion")
+KEYCHAIN_SERVICE = "Claude Code-credentials"
+
+# Everything under the shared configuration directory that is the operator's and
+# not the run's. The directory itself has to stay writable -- the CLI keeps its
+# state there and, on this machine, authenticates only from that one path -- but
+# nothing in this list is anything a run has business reading.
+SHARED_CLAUDE_DENY = ("history.jsonl", "projects", "todos", "file-history", "downloads",
+                      "shell-snapshots", "debug", "logs", "statsig", "commands",
+                      "skills", "plugins", "agents", "hooks", "CLAUDE.md", "AGENTS.md",
+                      "settings.json", "settings.local.json", "backups", "daemon", "jobs")
+
+
+def seed_claude_config(claude_home):
+    """Give this cell its own CLAUDE_CONFIG_DIR.
+
+    Per-run means nothing a cell writes to its configuration directory can reach
+    another cell. It costs what the harness's fault list said it would cost: the
+    CLI consults the login Keychain only for the default directory, so a per-run
+    directory has to carry the OAuth token as a file, and the agent under test
+    runs as the process that reads that file. That is a worse hole than the one
+    it closes, which is why --per-run-config is off by default and why the study
+    was not run with it.
+    """
+    f = claude_home / ".claude.json"
+    if not f.exists():
+        src = HOME / ".claude.json"
+        seed = {}
+        if src.exists():
+            whole = json.loads(src.read_text())
+            seed = {k: whole[k] for k in CONFIG_SEED_KEYS if k in whole}
+        seed["hasCompletedOnboarding"] = True
+        f.write_text(json.dumps(seed))
+        f.chmod(0o600)
+    c = claude_home / ".credentials.json"
+    if not c.exists():
+        p = sh("security", "find-generic-password", "-s", KEYCHAIN_SERVICE, "-w")
+        if p.returncode != 0 or not p.stdout.strip():
+            raise SystemExit("--per-run-config needs the login Keychain entry "
+                             f"{KEYCHAIN_SERVICE!r}, which is not readable here")
+        c.write_text(p.stdout.strip())
+        c.chmod(0o600)
 
 
 def marker(run):
@@ -180,7 +273,16 @@ def marker(run):
 
 
 def scan(run):
-    """Every file or directory written outside this run since the marker."""
+    """Every path outside this run whose mtime moved while the cell ran.
+
+    This is NOT write attribution and it does not show that the run wrote
+    anything: `find -newer` reports an mtime, not a writer, and on a machine
+    doing anything else at all it reports the operator's own files. It is a
+    smoke test -- an empty list is weak reassurance, a non-empty list is a
+    prompt to go and look. The evidence that the sandbox holds is canary.py,
+    which tries each forbidden write through the same profile and reports what
+    the kernel did.
+    """
     roots = [str(HOME / "Projects"), str(HOME / ".config"), str(HOME / ".cache"),
              str(HOME / ".cargo"), str(HOME / ".local"), str(HOME / ".ssh"),
              "/private/tmp", str(STUDY)]
@@ -201,28 +303,37 @@ def scan(run):
              "-not", "-path", str(HOME / ".claude") + "/*", "-print")
     # a root directory whose own mtime moved is not a file the run wrote
     lines = sorted(x for x in out.stdout.splitlines() if x.strip() and x not in roots)
-    (run / "escapes.txt").write_text("\n".join(lines) + "\n")
+    (run / "mtime_moved.txt").write_text("\n".join(lines) + "\n")
     return lines
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--task", required=True)
-    ap.add_argument("--arm", required=True, choices=["with", "without"])
+    ap.add_argument("--arm", required=True, choices=list(ARMS))
     ap.add_argument("--rep", type=int, default=1)
     ap.add_argument("--model", default="haiku")
     ap.add_argument("--budget", type=float, default=1.0, help="max USD of agent inference per cell")
     ap.add_argument("--timeout", type=float, default=900, help="seconds before a cell is abandoned")
+    ap.add_argument("--per-run-config", action="store_true",
+                    help="give the cell its own CLAUDE_CONFIG_DIR. Closes the shared-directory "
+                         "hole and opens a worse one: see seed_claude_config")
     a = ap.parse_args()
 
-    t, run, rid = build(a.task, a.arm, a.rep, a.model)
+    t, run, rid, claude_home = build(a.task, a.arm, a.rep, a.model, a.per_run_config)
     env = dict(os.environ)
     env["TMPDIR"] = str(run / "tmp")
     # a stale PWD outside the sandbox makes every /bin/sh print a getcwd warning
     # into the agent's context, which costs tokens and is not the task
     env["PWD"] = str(run / "work")
     env["JEVIFY_CACHE_DIR"] = str(run / "cache")
-    env["PATH"] = f"{run / 'bin'}:{env['PATH']}" if a.arm == "with" else env["PATH"]
+    env["PATH"] = f"{run / 'bin'}:{env['PATH']}" if HAS_JEVIFY[a.arm] else env["PATH"]
+    # per-run, so no two cells share a configuration directory and nothing a cell
+    # writes there can reach another. The OAuth credentials this machine
+    # authenticates with live in the Keychain, not in the configuration
+    # directory, so moving it costs nothing.
+    if a.per_run_config:
+        env["CLAUDE_CONFIG_DIR"] = str(claude_home)
     for k in ("TYPESAFE_API_KEY", "TYPESAFE_API_KEY_FILE"):
         env.pop(k, None)  # the study runs jevify keyless, so no arm can read a key
 
@@ -247,7 +358,7 @@ def main():
     wall = time.time() - t0
     (run / "transcript.jsonl").write_text(p.stdout)
     (run / "stderr.txt").write_text(p.stderr)
-    escapes = scan(run)
+    mtime_moved = scan(run)
 
     msgs = []
     for line in p.stdout.splitlines():
@@ -287,7 +398,7 @@ def main():
         "jevify_requests": sum((c.get("meta") or {}).get("requests") or 0 for c in calls),
         "jevify_questions": sum((c.get("meta") or {}).get("questions") or 0 for c in calls),
         "jevify_cache_hits": sum((c.get("meta") or {}).get("cache_hits") or 0 for c in calls),
-        "escapes": escapes,
+        "mtime_moved_outside_run": mtime_moved,
         "cli_exit": p.returncode,
     }
     (run / "meta.json").write_text(json.dumps(meta, indent=1))

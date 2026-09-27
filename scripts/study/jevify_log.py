@@ -4,7 +4,7 @@ recorded whether or not the agent says it made one.
 
 The Seatbelt profile denies exec on ~/.cargo/bin/jevify and on any
 target/*/jevify in BOTH arms, and allows exec on $JEVSTUDY/bin/jevify only for
-the with arm. So an agent cannot reach the binary except through this wrapper,
+the available and required arms. So an agent cannot reach the binary except through this wrapper,
 and the log is complete by construction rather than by the agent's report.
 
 Arguments are passed through byte for byte. When the agent did not ask for a
@@ -46,6 +46,16 @@ def run(argv, stdin_bytes):
     return p, int((time.time() - t0) * 1000)
 
 
+HEAD_CHARS = 4000  # enough to hold the handle jevify chose, short enough to read
+
+
+def head(b):
+    """What the tool printed, clipped. The required arm asks how often jevify's
+    answer became the agent's, and that cannot be checked from counters alone:
+    it needs the value the tool actually printed."""
+    return b[:HEAD_CHARS].decode("utf-8", "replace")
+
+
 def meta_of(stdout):
     try:
         j = json.loads(stdout.decode("utf-8", "replace"))
@@ -62,16 +72,18 @@ rec = {"ts": round(time.time(), 3), "verb": verb, "flags": flags, "argv": args,
        "stdin_bytes": None if data is None else len(data), "shadow": None}
 if machine:
     p, ms = run(args, data)
-    rec.update(exit=p.returncode, elapsed_ms=ms, meta=meta_of(p.stdout))
+    rec.update(exit=p.returncode, elapsed_ms=ms, meta=meta_of(p.stdout),
+               stdout_head=head(p.stdout))
 else:
     sh = list(args)
     ins = sh.index("--") if "--" in sh else len(sh)
     extra = ["--json"] + (["--dry-run"] if verb in ("fill", "add") and "--dry-run" not in flags else [])
     sh = sh[:ins] + extra + sh[ins:]
     sp, sms = run(sh, data)
-    rec["shadow"] = {"argv": sh, "exit": sp.returncode, "elapsed_ms": sms, "meta": meta_of(sp.stdout)}
+    rec["shadow"] = {"argv": sh, "exit": sp.returncode, "elapsed_ms": sms,
+                     "meta": meta_of(sp.stdout), "stdout_head": head(sp.stdout)}
     p, ms = run(args, data)
-    rec.update(exit=p.returncode, elapsed_ms=ms,
+    rec.update(exit=p.returncode, elapsed_ms=ms, stdout_head=head(p.stdout),
                meta=meta_of(p.stdout) if p.stdout[:1] == b"{" else rec["shadow"]["meta"])
 
 try:

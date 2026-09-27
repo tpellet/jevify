@@ -1,0 +1,7145 @@
+{
+ "D1": {
+  "question": "In the git repository at {repo}, find the one remote branch whose work stops meaningless figures being reported for a command that finishes too quickly to measure.",
+  "gold": "fix-319",
+  "kind": "branch",
+  "repo": "hyperfine",
+  "probes": [
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--all",
+     "--oneline",
+     "-i",
+     "--grep=stops"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "for-each-ref",
+     "--format=%(refname:short) %(subject)",
+     "refs/remotes"
+    ],
+    "candidates": 28,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "stops"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*stops*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--all",
+     "--oneline",
+     "-i",
+     "--grep=meaningless"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "meaningless"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*meaningless*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--all",
+     "--oneline",
+     "-i",
+     "--grep=figures"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "figures"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*figures*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--all",
+     "--oneline",
+     "-i",
+     "--grep=reported"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "reported"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*reported*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--all",
+     "--oneline",
+     "-i",
+     "--grep=command"
+    ],
+    "candidates": 26,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "command"
+    ],
+    "candidates": 36,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*command*"
+    ],
+    "candidates": 1,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--all",
+     "--oneline",
+     "-i",
+     "--grep=finishes"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "finishes"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*finishes*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--all",
+     "--oneline",
+     "-i",
+     "--grep=quickly"
+    ],
+    "candidates": 20,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "quickly"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*quickly*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--all",
+     "--oneline",
+     "-i",
+     "--grep=measure"
+    ],
+    "candidates": 26,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "measure"
+    ],
+    "candidates": 8,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*measure*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "log",
+     "--all",
+     "--oneline",
+     "-i",
+     "--grep=nan"
+    ],
+    "candidates": 25,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "log",
+     "--all",
+     "--oneline",
+     "-i",
+     "--grep=inf"
+    ],
+    "candidates": 25,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "log",
+     "--all",
+     "--oneline",
+     "-i",
+     "--grep=fast"
+    ],
+    "candidates": 26,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "is_nan"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   }
+  ],
+  "n_probes": 29,
+  "n_hit": 0,
+  "n_buried": 6,
+  "lexically_reachable": false
+ },
+ "D2": {
+  "question": "In the git repository at {repo}, find the one remote branch whose work adds, to the message shown when a benchmarked command exits unsuccessfully, a note of which repetition it was.",
+  "gold": "fix-771",
+  "kind": "branch",
+  "repo": "hyperfine",
+  "probes": [
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--all",
+     "--oneline",
+     "-i",
+     "--grep=adds"
+    ],
+    "candidates": 26,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "for-each-ref",
+     "--format=%(refname:short) %(subject)",
+     "refs/remotes"
+    ],
+    "candidates": 28,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "adds"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*adds*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--all",
+     "--oneline",
+     "-i",
+     "--grep=message"
+    ],
+    "candidates": 26,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "message"
+    ],
+    "candidates": 5,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*message*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--all",
+     "--oneline",
+     "-i",
+     "--grep=shown"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "shown"
+    ],
+    "candidates": 1,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*shown*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--all",
+     "--oneline",
+     "-i",
+     "--grep=benchmarked"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "benchmarked"
+    ],
+    "candidates": 9,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*benchmarked*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--all",
+     "--oneline",
+     "-i",
+     "--grep=command"
+    ],
+    "candidates": 26,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "command"
+    ],
+    "candidates": 36,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*command*"
+    ],
+    "candidates": 1,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--all",
+     "--oneline",
+     "-i",
+     "--grep=exits"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "exits"
+    ],
+    "candidates": 3,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*exits*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--all",
+     "--oneline",
+     "-i",
+     "--grep=unsuccessfully"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "unsuccessfully"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*unsuccessfully*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--all",
+     "--oneline",
+     "-i",
+     "--grep=note"
+    ],
+    "candidates": 25,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "note"
+    ],
+    "candidates": 11,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*note*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--all",
+     "--oneline",
+     "-i",
+     "--grep=repetition"
+    ],
+    "candidates": 26,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "repetition"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*repetition*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "log",
+     "--all",
+     "--oneline",
+     "-i",
+     "--grep=iteration"
+    ],
+    "candidates": 13,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "log",
+     "--all",
+     "--oneline",
+     "-i",
+     "--grep=failure"
+    ],
+    "candidates": 26,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "iteration"
+    ],
+    "candidates": 6,
+    "gold_present": false,
+    "verdict": "miss"
+   }
+  ],
+  "n_probes": 31,
+  "n_hit": 0,
+  "n_buried": 8,
+  "lexically_reachable": false
+ },
+ "D3": {
+  "question": "In the git repository at {repo}, find the single commit that deletes two hand-written blocks supplying the fallback variant of an enumeration in the options module, and has the compiler produce them instead. Search the history of the checked-out commit.",
+  "gold": "1c7a8cc",
+  "kind": "commit",
+  "repo": "hyperfine",
+  "probes": [
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=deletes"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "deletes"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "deletes"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*deletes*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=hand-written"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "hand-written"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "hand-written"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*hand-written*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=blocks"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "blocks"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "blocks"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*blocks*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=supplying"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "supplying"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "supplying"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*supplying*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=fallback"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "fallback"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "fallback"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*fallback*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=variant"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "variant"
+    ],
+    "candidates": 2,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "variant"
+    ],
+    "candidates": 1,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*variant*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=enumeration"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "enumeration"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "enumeration"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*enumeration*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=options"
+    ],
+    "candidates": 13,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "options"
+    ],
+    "candidates": 89,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "options"
+    ],
+    "candidates": 20,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*options*"
+    ],
+    "candidates": 1,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=module"
+    ],
+    "candidates": 16,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "module"
+    ],
+    "candidates": 5,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "module"
+    ],
+    "candidates": 3,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*module*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=compiler"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "compiler"
+    ],
+    "candidates": 4,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "compiler"
+    ],
+    "candidates": 4,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*compiler*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=produce"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "produce"
+    ],
+    "candidates": 5,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "produce"
+    ],
+    "candidates": 5,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*produce*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=instead"
+    ],
+    "candidates": 15,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "instead"
+    ],
+    "candidates": 12,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "instead"
+    ],
+    "candidates": 3,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*instead*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=checked-out"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "checked-out"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "checked-out"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*checked-out*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-S",
+     "#[default]"
+    ],
+    "candidates": 1,
+    "gold_present": true,
+    "verdict": "HIT"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-S",
+     "impl Default"
+    ],
+    "candidates": 15,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=derive"
+    ],
+    "candidates": 9,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "--",
+     "src/options.rs"
+    ],
+    "candidates": 60,
+    "gold_present": true,
+    "verdict": "buried"
+   }
+  ],
+  "n_probes": 56,
+  "n_hit": 1,
+  "n_buried": 2,
+  "lexically_reachable": true
+ },
+ "D4": {
+  "question": "In the git repository at {repo}, find the single commit that stops handing the export machinery the ordering to use at each write and has it remember that ordering from the moment it is built. Search the history of the checked-out commit.",
+  "gold": "038f369",
+  "kind": "commit",
+  "repo": "hyperfine",
+  "probes": [
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=stops"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "stops"
+    ],
+    "candidates": 2,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "stops"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*stops*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=handing"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "handing"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "handing"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*handing*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=export"
+    ],
+    "candidates": 38,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "export"
+    ],
+    "candidates": 77,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "export"
+    ],
+    "candidates": 20,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*export*"
+    ],
+    "candidates": 8,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=machinery"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "machinery"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "machinery"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*machinery*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=ordering"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "ordering"
+    ],
+    "candidates": 3,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "ordering"
+    ],
+    "candidates": 2,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*ordering*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=write"
+    ],
+    "candidates": 6,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "write"
+    ],
+    "candidates": 33,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "write"
+    ],
+    "candidates": 11,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*write*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=remember"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "remember"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "remember"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*remember*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=moment"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "moment"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "moment"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*moment*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=built"
+    ],
+    "candidates": 2,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "built"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "built"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*built*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=checked-out"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "checked-out"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "checked-out"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*checked-out*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-S",
+     "sort_order"
+    ],
+    "candidates": 4,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-S",
+     "SortOrder"
+    ],
+    "candidates": 6,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "--",
+     "src/export/mod.rs"
+    ],
+    "candidates": 31,
+    "gold_present": true,
+    "verdict": "buried"
+   }
+  ],
+  "n_probes": 43,
+  "n_hit": 0,
+  "n_buried": 4,
+  "lexically_reachable": false
+ },
+ "D5": {
+  "question": "In the git repository at {repo}, find the single commit whose whole change removes a redundant closure and borrow from the expression that fetches the configured substitution text before a matching line is printed. Search the history of the checked-out commit.",
+  "gold": "5e2d32f",
+  "kind": "commit",
+  "repo": "ripgrep",
+  "probes": [
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=whole"
+    ],
+    "candidates": 4,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "whole"
+    ],
+    "candidates": 14,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "whole"
+    ],
+    "candidates": 8,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*whole*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=change"
+    ],
+    "candidates": 201,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "change"
+    ],
+    "candidates": 109,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "change"
+    ],
+    "candidates": 44,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*change*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=removes"
+    ],
+    "candidates": 20,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "removes"
+    ],
+    "candidates": 4,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "removes"
+    ],
+    "candidates": 4,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*removes*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=redundant"
+    ],
+    "candidates": 5,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "redundant"
+    ],
+    "candidates": 5,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "redundant"
+    ],
+    "candidates": 2,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*redundant*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=closure"
+    ],
+    "candidates": 4,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "closure"
+    ],
+    "candidates": 6,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "closure"
+    ],
+    "candidates": 4,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*closure*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=borrow"
+    ],
+    "candidates": 4,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "borrow"
+    ],
+    "candidates": 28,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "borrow"
+    ],
+    "candidates": 15,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*borrow*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=expression"
+    ],
+    "candidates": 4,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "expression"
+    ],
+    "candidates": 49,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "expression"
+    ],
+    "candidates": 29,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*expression*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=fetches"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "fetches"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "fetches"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*fetches*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=configured"
+    ],
+    "candidates": 6,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "configured"
+    ],
+    "candidates": 36,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "configured"
+    ],
+    "candidates": 25,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*configured*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=substitution"
+    ],
+    "candidates": 1,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "substitution"
+    ],
+    "candidates": 5,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "substitution"
+    ],
+    "candidates": 1,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*substitution*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=text"
+    ],
+    "candidates": 57,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "text"
+    ],
+    "candidates": 138,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "text"
+    ],
+    "candidates": 55,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*text*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=matching"
+    ],
+    "candidates": 48,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "matching"
+    ],
+    "candidates": 133,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "matching"
+    ],
+    "candidates": 50,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*matching*"
+    ],
+    "candidates": 1,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=printed"
+    ],
+    "candidates": 13,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "printed"
+    ],
+    "candidates": 57,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "printed"
+    ],
+    "candidates": 25,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*printed*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=checked-out"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "checked-out"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "checked-out"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*checked-out*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-S",
+     "map(|r|"
+    ],
+    "candidates": 11,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-S",
+     "replacement"
+    ],
+    "candidates": 35,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=simplify"
+    ],
+    "candidates": 13,
+    "gold_present": true,
+    "verdict": "buried"
+   }
+  ],
+  "n_probes": 59,
+  "n_hit": 0,
+  "n_buried": 2,
+  "lexically_reachable": false
+ },
+ "D6": {
+  "question": "In the repository at {repo}, find the one source file that owns the reusable buffer machinery used to build the text of a line after the matched parts of it have been substituted.",
+  "gold": "crates/printer/src/util.rs",
+  "kind": "path",
+  "repo": "ripgrep",
+  "probes": [
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "owns"
+    ],
+    "candidates": 8,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*owns*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "reusable"
+    ],
+    "candidates": 1,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*reusable*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "buffer"
+    ],
+    "candidates": 33,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*buffer*"
+    ],
+    "candidates": 1,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "machinery"
+    ],
+    "candidates": 1,
+    "gold_present": true,
+    "verdict": "HIT"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*machinery*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "build"
+    ],
+    "candidates": 86,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*build*"
+    ],
+    "candidates": 1,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "text"
+    ],
+    "candidates": 55,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*text*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "matched"
+    ],
+    "candidates": 44,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*matched*"
+    ],
+    "candidates": 2,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "substituted"
+    ],
+    "candidates": 1,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*substituted*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "Replacer"
+    ],
+    "candidates": 3,
+    "gold_present": true,
+    "verdict": "HIT"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "replacement"
+    ],
+    "candidates": 24,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "amortiz"
+    ],
+    "candidates": 8,
+    "gold_present": true,
+    "verdict": "buried"
+   }
+  ],
+  "n_probes": 19,
+  "n_hit": 2,
+  "n_buried": 5,
+  "lexically_reachable": true
+ },
+ "D7": {
+  "question": "In the repository at {repo}, find the one source file holding the state and the bookkeeping that both of the searcher's two reading strategies share: the part that decides, line by line, what is handed on to the consumer.",
+  "gold": "crates/searcher/src/searcher/core.rs",
+  "kind": "path",
+  "repo": "ripgrep",
+  "probes": [
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "holding"
+    ],
+    "candidates": 1,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*holding*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "state"
+    ],
+    "candidates": 23,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*state*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "bookkeeping"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*bookkeeping*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "searcher's"
+    ],
+    "candidates": 3,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*searcher's*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "reading"
+    ],
+    "candidates": 24,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*reading*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "strategies"
+    ],
+    "candidates": 5,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*strategies*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "share"
+    ],
+    "candidates": 14,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*share*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "decides"
+    ],
+    "candidates": 2,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*decides*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "handed"
+    ],
+    "candidates": 1,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*handed*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "consumer"
+    ],
+    "candidates": 4,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*consumer*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "ReadByLine"
+    ],
+    "candidates": 2,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "grep",
+     "-lw",
+     "Core"
+    ],
+    "candidates": 2,
+    "gold_present": true,
+    "verdict": "HIT"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "bookkeeping"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   }
+  ],
+  "n_probes": 23,
+  "n_hit": 1,
+  "n_buried": 0,
+  "lexically_reachable": true
+ },
+ "D8": {
+  "question": "In the repository at {repo}, find the one Go source file that defines the pre-allocated pair of integer buffers the scoring code borrows so that it need not allocate working space for each candidate.",
+  "gold": "src/util/slab.go",
+  "kind": "path",
+  "repo": "fzf",
+  "probes": [
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "defines"
+    ],
+    "candidates": 4,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*defines*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "pre-allocated"
+    ],
+    "candidates": 2,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*pre-allocated*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "pair"
+    ],
+    "candidates": 15,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*pair*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "integer"
+    ],
+    "candidates": 9,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*integer*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "buffers"
+    ],
+    "candidates": 3,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*buffers*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "scoring"
+    ],
+    "candidates": 6,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*scoring*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "code"
+    ],
+    "candidates": 53,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*code*"
+    ],
+    "candidates": 1,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "borrows"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*borrows*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "allocate"
+    ],
+    "candidates": 4,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*allocate*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "space"
+    ],
+    "candidates": 40,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*space*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "candidate"
+    ],
+    "candidates": 6,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*candidate*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "Slab"
+    ],
+    "candidates": 14,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "preallocat"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "scratch"
+    ],
+    "candidates": 2,
+    "gold_present": false,
+    "verdict": "miss"
+   }
+  ],
+  "n_probes": 25,
+  "n_hit": 0,
+  "n_buried": 1,
+  "lexically_reachable": false
+ },
+ "D9": {
+  "question": "In the git repository at {repo}, find the single commit that removes two narrowing conversions from size comparisons and caps a count taken from the user at the largest value the narrower width can hold. Search the history of the checked-out commit.",
+  "gold": "25868a62",
+  "kind": "commit",
+  "repo": "fzf",
+  "probes": [
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=removes"
+    ],
+    "candidates": 7,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "removes"
+    ],
+    "candidates": 6,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "removes"
+    ],
+    "candidates": 4,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*removes*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=narrowing"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "narrowing"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "narrowing"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*narrowing*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=conversions"
+    ],
+    "candidates": 2,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "conversions"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "conversions"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*conversions*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=size"
+    ],
+    "candidates": 64,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "size"
+    ],
+    "candidates": 178,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "size"
+    ],
+    "candidates": 52,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*size*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=comparisons"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "comparisons"
+    ],
+    "candidates": 1,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "comparisons"
+    ],
+    "candidates": 1,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*comparisons*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=caps"
+    ],
+    "candidates": 2,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "caps"
+    ],
+    "candidates": 1,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "caps"
+    ],
+    "candidates": 3,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*caps*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=count"
+    ],
+    "candidates": 25,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "count"
+    ],
+    "candidates": 219,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "count"
+    ],
+    "candidates": 43,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*count*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=user"
+    ],
+    "candidates": 181,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "user"
+    ],
+    "candidates": 166,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "user"
+    ],
+    "candidates": 28,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*user*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=largest"
+    ],
+    "candidates": 1,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "largest"
+    ],
+    "candidates": 4,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "largest"
+    ],
+    "candidates": 1,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*largest*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=narrower"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "narrower"
+    ],
+    "candidates": 1,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "narrower"
+    ],
+    "candidates": 1,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*narrower*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=width"
+    ],
+    "candidates": 50,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "width"
+    ],
+    "candidates": 338,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "width"
+    ],
+    "candidates": 37,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*width*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=hold"
+    ],
+    "candidates": 32,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "hold"
+    ],
+    "candidates": 68,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "hold"
+    ],
+    "candidates": 23,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*hold*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=checked-out"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "checked-out"
+    ],
+    "candidates": 1,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "checked-out"
+    ],
+    "candidates": 1,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*checked-out*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-S",
+     "math.MaxInt32"
+    ],
+    "candidates": 17,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-S",
+     "MaxInt32"
+    ],
+    "candidates": 17,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=overflow"
+    ],
+    "candidates": 5,
+    "gold_present": false,
+    "verdict": "miss"
+   }
+  ],
+  "n_probes": 55,
+  "n_hit": 0,
+  "n_buried": 2,
+  "lexically_reachable": false
+ },
+ "D10": {
+  "question": "In the git repository at {repo}, find the one remote branch whose work replaces the comparison-based ordering of matched results with a digit-by-digit method.",
+  "gold": "perf",
+  "kind": "branch",
+  "repo": "fzf",
+  "probes": [
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--all",
+     "--oneline",
+     "-i",
+     "--grep=replaces"
+    ],
+    "candidates": 12,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "for-each-ref",
+     "--format=%(refname:short) %(subject)",
+     "refs/remotes"
+    ],
+    "candidates": 14,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "replaces"
+    ],
+    "candidates": 3,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*replaces*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--all",
+     "--oneline",
+     "-i",
+     "--grep=comparison-based"
+    ],
+    "candidates": 7,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "comparison-based"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*comparison-based*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--all",
+     "--oneline",
+     "-i",
+     "--grep=ordering"
+    ],
+    "candidates": 12,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "ordering"
+    ],
+    "candidates": 3,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*ordering*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--all",
+     "--oneline",
+     "-i",
+     "--grep=matched"
+    ],
+    "candidates": 12,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "matched"
+    ],
+    "candidates": 9,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*matched*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--all",
+     "--oneline",
+     "-i",
+     "--grep=results"
+    ],
+    "candidates": 12,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "results"
+    ],
+    "candidates": 21,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*results*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--all",
+     "--oneline",
+     "-i",
+     "--grep=digit-by-digit"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "digit-by-digit"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*digit-by-digit*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--all",
+     "--oneline",
+     "-i",
+     "--grep=method"
+    ],
+    "candidates": 12,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "method"
+    ],
+    "candidates": 12,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*method*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "log",
+     "--all",
+     "--oneline",
+     "-i",
+     "--grep=radix"
+    ],
+    "candidates": 7,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "log",
+     "--all",
+     "--oneline",
+     "-i",
+     "--grep=sort"
+    ],
+    "candidates": 12,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "radix"
+    ],
+    "candidates": 4,
+    "gold_present": false,
+    "verdict": "miss"
+   }
+  ],
+  "n_probes": 25,
+  "n_hit": 0,
+  "n_buried": 9,
+  "lexically_reachable": false
+ },
+ "E1": {
+  "question": "In the git repository at {repo}, find the single commit whose whole change names the borrow in the return type of the two entry points that work out how much slower each command is than the quickest one. Search the history of the checked-out commit.",
+  "gold": "98d262c",
+  "kind": "commit",
+  "repo": "hyperfine",
+  "probes": [
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=whole"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "whole"
+    ],
+    "candidates": 1,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "whole"
+    ],
+    "candidates": 1,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*whole*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=change"
+    ],
+    "candidates": 110,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "change"
+    ],
+    "candidates": 21,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "change"
+    ],
+    "candidates": 7,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*change*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=names"
+    ],
+    "candidates": 10,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "names"
+    ],
+    "candidates": 29,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "names"
+    ],
+    "candidates": 10,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*names*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=borrow"
+    ],
+    "candidates": 4,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "borrow"
+    ],
+    "candidates": 2,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "borrow"
+    ],
+    "candidates": 1,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*borrow*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=return"
+    ],
+    "candidates": 5,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "return"
+    ],
+    "candidates": 72,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "return"
+    ],
+    "candidates": 20,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*return*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=type"
+    ],
+    "candidates": 123,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "type"
+    ],
+    "candidates": 60,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "type"
+    ],
+    "candidates": 17,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*type*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=entry"
+    ],
+    "candidates": 9,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "entry"
+    ],
+    "candidates": 29,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "entry"
+    ],
+    "candidates": 3,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*entry*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=points"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "points"
+    ],
+    "candidates": 2,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "points"
+    ],
+    "candidates": 2,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*points*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=slower"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "slower"
+    ],
+    "candidates": 4,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "slower"
+    ],
+    "candidates": 3,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*slower*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=command"
+    ],
+    "candidates": 54,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "command"
+    ],
+    "candidates": 204,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "command"
+    ],
+    "candidates": 36,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*command*"
+    ],
+    "candidates": 1,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=quickest"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "quickest"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "quickest"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*quickest*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=checked-out"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "checked-out"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "checked-out"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*checked-out*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-S",
+     "<'_>"
+    ],
+    "candidates": 21,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=lifetime"
+    ],
+    "candidates": 3,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "--",
+     "src/benchmark/relative_speed.rs"
+    ],
+    "candidates": 10,
+    "gold_present": true,
+    "verdict": "buried"
+   }
+  ],
+  "n_probes": 51,
+  "n_hit": 0,
+  "n_buried": 2,
+  "lexically_reachable": false
+ },
+ "E2": {
+  "question": "In the git repository at {repo}, find the single commit whose whole change drops one needless conversion from a chain of iterator adaptors in the test helper that builds fake results. Search the history of the checked-out commit.",
+  "gold": "ebcf794",
+  "kind": "commit",
+  "repo": "hyperfine",
+  "probes": [
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=whole"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "whole"
+    ],
+    "candidates": 1,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "whole"
+    ],
+    "candidates": 1,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*whole*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=change"
+    ],
+    "candidates": 110,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "change"
+    ],
+    "candidates": 21,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "change"
+    ],
+    "candidates": 7,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*change*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=drops"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "drops"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "drops"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*drops*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=needless"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "needless"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "needless"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*needless*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=conversion"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "conversion"
+    ],
+    "candidates": 2,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "conversion"
+    ],
+    "candidates": 2,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*conversion*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=chain"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "chain"
+    ],
+    "candidates": 9,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "chain"
+    ],
+    "candidates": 3,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*chain*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=iterator"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "iterator"
+    ],
+    "candidates": 19,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "iterator"
+    ],
+    "candidates": 4,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*iterator*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=adaptors"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "adaptors"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "adaptors"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*adaptors*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=test"
+    ],
+    "candidates": 44,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "test"
+    ],
+    "candidates": 98,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "test"
+    ],
+    "candidates": 26,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*test*"
+    ],
+    "candidates": 6,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=helper"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "helper"
+    ],
+    "candidates": 8,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "helper"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*helper*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=builds"
+    ],
+    "candidates": 3,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "builds"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "builds"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*builds*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=fake"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "fake"
+    ],
+    "candidates": 5,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "fake"
+    ],
+    "candidates": 2,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*fake*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=results"
+    ],
+    "candidates": 14,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "results"
+    ],
+    "candidates": 91,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "results"
+    ],
+    "candidates": 22,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*results*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=checked-out"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "-S",
+     "checked-out"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "checked-out"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*checked-out*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-S",
+     "into_iter"
+    ],
+    "candidates": 8,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-i",
+     "--grep=clippy"
+    ],
+    "candidates": 19,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "log",
+     "--oneline",
+     "-n",
+     "400",
+     "-S",
+     "generate_results"
+    ],
+    "candidates": 1,
+    "gold_present": false,
+    "verdict": "miss"
+   }
+  ],
+  "n_probes": 59,
+  "n_hit": 0,
+  "n_buried": 2,
+  "lexically_reachable": false
+ },
+ "E3": {
+  "question": "In the git repository at {repo}, find the one remote branch whose work completes the move of the project's automated checks onto the hosting provider's own runners.",
+  "gold": "ag/moarci",
+  "kind": "branch",
+  "repo": "ripgrep",
+  "probes": [
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--all",
+     "--oneline",
+     "-i",
+     "--grep=completes"
+    ],
+    "candidates": 15,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "for-each-ref",
+     "--format=%(refname:short) %(subject)",
+     "refs/remotes"
+    ],
+    "candidates": 17,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "completes"
+    ],
+    "candidates": 1,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*completes*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--all",
+     "--oneline",
+     "-i",
+     "--grep=move"
+    ],
+    "candidates": 15,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "move"
+    ],
+    "candidates": 37,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*move*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--all",
+     "--oneline",
+     "-i",
+     "--grep=project's"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "project's"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*project's*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--all",
+     "--oneline",
+     "-i",
+     "--grep=automated"
+    ],
+    "candidates": 3,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "automated"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*automated*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--all",
+     "--oneline",
+     "-i",
+     "--grep=checks"
+    ],
+    "candidates": 15,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "checks"
+    ],
+    "candidates": 16,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*checks*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--all",
+     "--oneline",
+     "-i",
+     "--grep=hosting"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "hosting"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*hosting*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--all",
+     "--oneline",
+     "-i",
+     "--grep=provider's"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "provider's"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*provider's*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "log",
+     "--all",
+     "--oneline",
+     "-i",
+     "--grep=runners"
+    ],
+    "candidates": 3,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "runners"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*runners*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "log",
+     "--all",
+     "--oneline",
+     "-i",
+     "--grep=actions"
+    ],
+    "candidates": 15,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "log",
+     "--all",
+     "--oneline",
+     "-i",
+     "--grep=travis"
+    ],
+    "candidates": 15,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "branch",
+     "-r",
+     "--list",
+     "*ci*"
+    ],
+    "candidates": 1,
+    "gold_present": true,
+    "verdict": "HIT"
+   }
+  ],
+  "n_probes": 28,
+  "n_hit": 1,
+  "n_buried": 6,
+  "lexically_reachable": true
+ },
+ "E4": {
+  "question": "In the repository at {repo}, find the one source file that declares the record shapes emitted when output is asked for as machine-readable objects, shaped so that writing them out needs little or no extra allocation and offering no way back from text.",
+  "gold": "crates/printer/src/jsont.rs",
+  "kind": "path",
+  "repo": "ripgrep",
+  "probes": [
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "declares"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*declares*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "record"
+    ],
+    "candidates": 8,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*record*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "shapes"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*shapes*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "emitted"
+    ],
+    "candidates": 13,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*emitted*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "output"
+    ],
+    "candidates": 46,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*output*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "asked"
+    ],
+    "candidates": 3,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*asked*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "machine-readable"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*machine-readable*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "objects"
+    ],
+    "candidates": 4,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*objects*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "shaped"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*shaped*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "writing"
+    ],
+    "candidates": 26,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*writing*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "little"
+    ],
+    "candidates": 11,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*little*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "extra"
+    ],
+    "candidates": 36,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*extra*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "allocation"
+    ],
+    "candidates": 10,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*allocation*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "offering"
+    ],
+    "candidates": 1,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*offering*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "back"
+    ],
+    "candidates": 39,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*back*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "text"
+    ],
+    "candidates": 55,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "derived",
+    "cmd": [
+     "git",
+     "ls-files",
+     "*text*"
+    ],
+    "candidates": 0,
+    "gold_present": false,
+    "verdict": "miss"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "serializ"
+    ],
+    "candidates": 5,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "deserializ"
+    ],
+    "candidates": 4,
+    "gold_present": true,
+    "verdict": "buried"
+   },
+   {
+    "kind": "guessed",
+    "cmd": [
+     "git",
+     "grep",
+     "-il",
+     "json"
+    ],
+    "candidates": 21,
+    "gold_present": true,
+    "verdict": "buried"
+   }
+  ],
+  "n_probes": 35,
+  "n_hit": 0,
+  "n_buried": 6,
+  "lexically_reachable": false
+ }
+}

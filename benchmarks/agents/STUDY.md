@@ -1,5 +1,13 @@
 # The paired study harness, and twelve runs that validate it
 
+**Superseded as a study, kept as the harness's own record.** The twelve runs below
+validate the harness and nothing else, and the two faults they exposed in the
+study's design -- a task set both arms ace, and an adoption rate conflated with an
+efficacy rate -- are fixed in `benchmarks/agents/ADOPTION.md`, which is the study.
+The task set here (S1-S8) was replaced: `baseline.py` disqualifies a task a literal
+search can answer, and it disqualifies several of these. Read this file for how the
+sandbox, the blinding and the call log work; read `ADOPTION.md` for a result.
+
 `benchmarks/agents/PILOT.md` records two runs of eight tasks with one run per
 cell, a baseline restricted in ways a real user is not, a sandbox one agent
 stepped out of with `cd`, and one cell where the with arm never called jevify.

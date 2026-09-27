@@ -19,6 +19,15 @@ around the agent process itself, so `cd` buys nothing and the built-in file tool
 too; and a scorer that reads arm-free records. Its twelve validation runs, its own faults and the
 price of the full run are in that page. The runner is `scripts/study/`.
 
+The [three-arm study](ADOPTION.md) is that harness used on tasks a literal search
+cannot answer, with adoption measured apart from efficacy. `baseline.py` records,
+per task, that the searches a competent engineer would try do not find the answer,
+and it disqualified four of fourteen candidate tasks. Three arms: jevify absent,
+jevify present and mentioned once, jevify required. The headline is that an agent
+told once that the tool exists reached for it in 11 of 16 runs, against zero of six
+on the easier set; on correctness the three arms are indistinguishable at 16 runs
+each, and that null result is written as one.
+
 Does jevify help a coding agent that already has `grep`, can read files and knows the usual
 command-line tools? Two experiments. The first gives an agent one question about a text (`why`,
 `is`). The second gives it a seven-step job where it has to choose tools (`run`). Few runs per
