@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+Changed:
+
+- The call shapes coding agents write work. A description is one quoted argument or several
+  bare words (`jevify pick --from commit names the borrow`), for `pick`, `filter`, `add` and
+  `route`; `is` keeps one statement per argument and warns when three or more are single words.
+  A leading `-` and `--from -` name stdin, and a verb's options may come before the verb. In the
+  adoption study, agent calls failed on argument shape or directory before any model was asked
+  (benchmarks/agents/ADOPTION.md, section 5).
+- `-C DIR` (`--repo`) runs `fill` or `pick` as if started in DIR, and `fill` lists where a
+  `git -C DIR` command points instead of failing with `not a git repository`.
+- `pick --files` with nothing on stdin ranks the files under the current directory and says so,
+  where it was an input error.
+- Every error names a command to run next, the caller's own corrected when jevify can, in the
+  `try:` line and `error.example`, instead of a pointer to `capabilities`. A lister run outside a
+  repository names the directory it ran in and the repositories below it. An unknown verb names
+  the nearest verb, the installed version and `cargo install jevify`.
+- An abstention names its nearest candidates as `nearest (not chosen)`, with scores and a hint,
+  in `pick`, `why`, `add` and `fill`; `pick`'s envelope adds `closest` and `hint`. An agent had
+  answered with a 0.27 candidate from the old `closest:` line.
+- A bare `@{branch:...}` in a git subcommand that reads a revision (`log`, `show`, `diff`, ...)
+  becomes the remote ref of a branch that exists only on a remote, which git resolves; `switch`
+  and `checkout` keep the short name.
+- `add` without `--yes` and without a terminal declines (exit 130) before any classification.
+- `sort` accepts one file, sorted alone among the folders beside it or under `--into`.
+
 ## 0.13.0 - 2026-09-24
 
 Changed:
