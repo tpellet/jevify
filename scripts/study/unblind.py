@@ -102,15 +102,28 @@ def calls_of(run):
     return [json.loads(l) for l in f.read_text().splitlines() if l.strip()]
 
 
+MAX_ANSWER = 3  # an output naming more candidates than this is a listing, not an answer
+
+
 def printed(call):
-    """What the tool showed as its answer. jev ranks every option it was given,
-    so only its first line is an answer; jevify prints what it chose, plus the
-    shadow envelope when the agent did not ask for one."""
+    """What the tool gave as its answer, or "" when it gave a listing.
+
+    jev ranks every option it was given, so only its first line is an answer.
+    For jevify the envelope is read -- the agent's own --json, or the shadow's --
+    and its chosen handles (`handle` of a fill marker, `text` of a pick match or
+    a kept record) are the answer. A `fill` that ran `git log` prints the child's
+    whole log, and a `filter` can keep hundreds of records; either may contain
+    the gold without having chosen it, so more than MAX_ANSWER handles, or more
+    than MAX_ANSWER lines of plain output, count as no answer."""
     if call.get("tool") == "jev":
         first = (call.get("stdout_head") or "").split("\n", 1)[0]
         return first.split("\t", 1)[1] if "\t" in first else ""
-    sh = call.get("shadow") or {}
-    return "\n".join([call.get("stdout_head") or "", sh.get("stdout_head") or ""])
+    for env in ((call.get("shadow") or {}).get("stdout_head") or "", call.get("stdout_head") or ""):
+        if env.lstrip().startswith("{"):
+            picks = re.findall(r'"(?:handle|text)":\s*"([^"]+)"', env)
+            return "\n".join(picks) if len(picks) <= MAX_ANSWER else ""
+    lines = [l for l in (call.get("stdout_head") or "").splitlines() if l.strip()]
+    return "\n".join(lines) if len(lines) <= MAX_ANSWER else ""
 
 
 def exit_class(call):
@@ -121,6 +134,16 @@ def exit_class(call):
     if call.get("verb") == "fill" and ex not in (0, None) and sh.get("exit") == 0:
         return "child"
     return JEVIFY_EXIT.get(ex, "child")
+
+
+OUTAGE = ("request_spending_limit", "free_ip_daily_budget", "rate_limit_day")
+
+
+def outage(run_calls):
+    """A run in which the keyless backend refused a call for budget, not for
+    anything the agent asked: it measured the backend's allowance running out."""
+    return any(exit_class(c) == "unavailable" and any(o in (c.get("stderr_head") or "") for o in OUTAGE)
+               for c in run_calls)
 
 
 def med(xs):
@@ -167,6 +190,8 @@ def main():
                          "deleted from a finished study tree, so they are excluded by number.")
     ap.add_argument("--json", help="write the per-(model, arm) summary here")
     ap.add_argument("--quiet", action="store_true", help="no per-run table and no call list")
+    ap.add_argument("--keep-outage", action="store_true",
+                    help="keep runs whose tool calls hit the keyless budget limit (dropped by default)")
     a = ap.parse_args()
     keep = set(a.tasks.split(",")) if a.tasks else None
     arms = [x for x in ARMS if x in a.arms.split(",")]
@@ -195,6 +220,11 @@ def main():
         rows.append({**info, "score": scored[bid], "dir": d, "meta": meta,
                      "calls": calls_of(d), "answer": (d / "answer.txt").read_text().strip()})
     rows.sort(key=lambda r: (r["model"], r["task"], ARMS.index(r["arm"]), r["rep"]))
+    hit = [r["rid"] for r in rows if outage(r["calls"])]
+    print(f"runs whose tool calls hit the keyless budget limit: {len(hit)}"
+          f" ({'kept' if a.keep_outage else 'dropped'}) {' '.join(hit)}")
+    if not a.keep_outage:
+        rows = [r for r in rows if r["rid"] not in set(hit)]
     if not rows:
         raise SystemExit("no runs match; run run_parallel.sh, blind.py and score.py first")
     models = sorted({r["model"] for r in rows})

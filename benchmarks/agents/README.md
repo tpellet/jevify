@@ -28,6 +28,13 @@ told once that the tool exists reached for it in 11 of 16 runs, against zero of 
 on the easier set; on correctness the three arms are indistinguishable at 16 runs
 each, and that null result is written as one.
 
+The [four-arm study](SCALED.md) adds a thin arm, `scripts/thinjev/jev`: one keyless call
+to the same model ranking options the agent supplies, with no listers, evidence, rounds or
+threshold. Seventeen gated tasks, haiku and sonnet, six cells at a time; 109 of 408 cells
+finished before the network's free keyless allowance ran out. Correctness does not
+separate the arms; jevify is adopted about twice as often as `jev`, finds candidates the
+agent's own list misses, and abstains on most unprompted calls.
+
 Does jevify help a coding agent that already has `grep`, can read files and knows the usual
 command-line tools? Two experiments. The first gives an agent one question about a text (`why`,
 `is`). The second gives it a seven-step job where it has to choose tools (`run`). Few runs per

@@ -43,7 +43,11 @@ echo "$(date -u +%FT%TZ) P=$P cells=$N models=$MODELS arms=$ARMS tasks=$TASKS" >
 echo "running $N cells, $P at a time"
 # xargs appends one cell's five words to the two fixed arguments:
 # $0 harness dir, $1 study dir, $2 task, $3 arm, $4 model, $5 rep, $6 budget
+# A cell with a meta.json finished in an earlier invocation and is skipped, so a
+# block that was stopped resumes where it stopped; a cell stopped mid-run has no
+# meta.json and runs again in a fresh working copy.
 printf '%s\n' "$CELLS" | xargs -P "$P" -L 1 sh -c '
+  [ -f "$1/runs/$2-$3-$4-r$5/meta.json" ] && { echo "skip   $2 $3 $4 r$5"; exit 0; }
   python3 "$0/run_cell.py" --task "$2" --arm "$3" --model "$4" --rep "$5" --budget "$6" \
     > "$1/runs/$2-$3-$4-r$5/cell.out" 2>&1 && echo "done   $2 $3 $4 r$5" || echo "FAILED $2 $3 $4 r$5"
 ' "$DIR" "$STUDY"
