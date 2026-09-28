@@ -1,0 +1,17 @@
+{
+  "description": "When a Bash command fails with a long output, jevify why points at the line that explains the failure.",
+  "hooks": {
+    "PostToolUseFailure": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/hooks/why-on-fail.sh\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

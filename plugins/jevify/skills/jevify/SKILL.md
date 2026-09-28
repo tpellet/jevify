@@ -220,3 +220,26 @@ full input remains available.
 `--files` withholds excerpts of hidden paths and files that look like secrets; stderr reports
 `excerpts withheld: N`. Their names still reach the backend. Withholding an excerpt is not a
 guarantee that the remaining input contains no sensitive information.
+
+## `why` on every failure: the hook and the GitHub Action
+
+The plugin's `PostToolUseFailure` hook on Bash (`hooks/why-on-fail.sh`) runs `jevify why` on a
+failed command's output when it has at least `JEVIFY_HOOK_MIN_LINES` lines (default 80). The
+line it points at, with context and the saved-output path, arrives next to the error: read that
+line first. The hook adds nothing when the command was interrupted, `jevify` or `jq` is not on
+PATH, `why` abstains or fails, or 20 seconds pass, and it never blocks a tool call. It uses the
+session's backend configuration and never reads the key; the output goes to the backend as in
+any `why` call. It judges the failed result as Claude Code passes it, about 10,000 characters
+of head and tail, so a cause in the cut middle needs `cmd 2>&1 | jevify why` on the whole output.
+
+In GitHub Actions, the repository's `action.yml` installs jevify and writes the pointed line to
+the job summary; it writes nothing on abstention and never fails the job. `shell: bash` gives
+the step pipefail, so it fails with the build rather than with `tee`:
+
+```yaml
+- run: cargo test --locked 2>&1 | tee build.log
+  shell: bash
+- if: failure()
+  uses: tpellet/jevify@main
+  with: { log: build.log }  # optional: typesafe-api-key
+```

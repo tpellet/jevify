@@ -1,0 +1,69 @@
+# jevify why: the line that explains a failed job, in the job summary.
+#
+# Usage: save the output of the step that can fail, then run this action only
+# after a failure. `shell: bash` runs the step with pipefail, so the step fails
+# when the build fails, not when tee succeeds.
+#
+#   - run: cargo test --locked 2>&1 | tee build.log
+#     shell: bash
+#   - if: failure()
+#     uses: tpellet/jevify@main
+#     with:
+#       log: build.log
+#       typesafe-api-key: ${{ secrets.TYPESAFE_API_KEY }}   # optional; keyless without it
+#
+# The action installs the latest jevify release with its shell installer when
+# jevify is not on PATH (Linux and macOS runners), runs `jevify why < log`, and
+# appends the line it points at, with context, to $GITHUB_STEP_SUMMARY in a
+# fenced block. When no line looks like a failure (exit 3) it writes nothing;
+# any other failure is a warning in the log. It never fails the job: the failed
+# step already did. The log goes to the backend with best-effort redaction of
+# secrets; jevify saves no local copy (--no-save).
+name: jevify why
+description: Point at the line that explains a failed build or test and write it to the job summary.
+author: tpellet
+branding:
+  icon: search
+  color: gray-dark
+inputs:
+  log:
+    description: Path to a file holding the failed step's output, stdout and stderr (`2>&1 | tee build.log`).
+    required: true
+  typesafe-api-key:
+    description: TypeSafe API key. Without it jevify uses the keyless classifier.dev backend.
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: jevify why
+      shell: bash
+      env:
+        LOG_FILE: ${{ inputs.log }}
+        TYPESAFE_API_KEY: ${{ inputs.typesafe-api-key }}
+        JEVIFY_NO_MODIFY_PATH: "1"
+        JEVIFY_DEADLINE: "120"
+      run: |
+        set +e
+        if [ ! -f "$LOG_FILE" ]; then
+          echo "::warning title=jevify why::no log file at $LOG_FILE"
+          exit 0
+        fi
+        if ! command -v jevify >/dev/null; then
+          curl --proto '=https' --tlsv1.2 -LsSf https://github.com/tpellet/jevify/releases/latest/download/jevify-installer.sh | sh
+        fi
+        jevify=$(command -v jevify || echo "${CARGO_HOME:-$HOME/.cargo}/bin/jevify")
+        answer=$("$jevify" why --no-save < "$LOG_FILE")
+        rc=$?
+        if [ "$rc" -eq 0 ] && [ -n "$answer" ]; then
+          {
+            echo '### Why it failed'
+            echo
+            echo '```text'
+            printf '%s\n' "$answer"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+        elif [ "$rc" -ne 3 ]; then
+          echo "::warning title=jevify why::jevify exited $rc; the job summary has no cause"
+        fi
+        exit 0
