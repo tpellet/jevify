@@ -26,8 +26,8 @@ credits, set `TYPESAFE_API_KEY_FILE=/path/to/key`. `jevify health` checks the ba
 gh run view <id> --log-failed | jevify why
 ```
 
-**Root-cause line first in 28/34 failed GitHub Actions runs**, measured on 2026-09-28 with
-TypeSafe across public repositories. It points at a wrong line in the remaining six.
+**Root-cause line first in 30/34 failed GitHub Actions runs**, measured on 2026-09-28 with
+TypeSafe across 30 public repositories. It points at a wrong line in four.
 [Cases, method and baselines](benchmarks/why-ci.md). A pointer is something to check.
 
 For a local build, pipe stderr too: `cargo build 2>&1 | jevify why`.

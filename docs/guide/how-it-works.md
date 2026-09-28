@@ -88,13 +88,13 @@ unknown token usage is null. [Robot mode](../ROBOT_MODE.md) defines telemetry.
 
 ## Numbers
 
-Measured 2026-09-28 on TypeSafe: `why` names the root-cause line first in **28 of 34** failed
+Measured 2026-09-28 on TypeSafe: `why` names the root-cause line first in **30 of 34** failed
 GitHub Actions runs from 30 public repositories. A separate `-n 3` run includes the root cause
-in its top three in 30. The first-line run points at a wrong line in six and abstains in none.
+in its top three in 31. The first-line run points at a wrong line in four and abstains in none.
 `tail -n 50` contains the gold diagnostic in 10 cases; a five-line grep baseline contains it
-in 11. Median `why` latency is 0.84 seconds.
+in 11. Median `why` latency is 0.87 seconds on a loaded machine.
 
-The downstream agent receives 99.7% fewer estimated tokens in aggregate, comparing complete
+The downstream agent receives 99.76% fewer estimated tokens in aggregate, comparing complete
 JSON stdout with full failed-job logs. This is a payload measurement, not total inference cost
 or agent task success; large logs dominate it. The purposive sample, gold labels and failures
 are in [benchmarks/why-ci.md](../../benchmarks/why-ci.md).

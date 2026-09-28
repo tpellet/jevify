@@ -14,6 +14,13 @@ into a pointer, a subset, or a decision. It selects existing text and never inve
 Use cheap tools first: `grep`, `jq`, `head`. Skip jevify when a literal search answers the
 question, the input is short enough to read, or you already know the required value.
 
+Measured 2026-09-28 on TypeSafe across 34 failed GitHub Actions runs from 30 public repositories:
+`why` puts the root-cause line first in 30/34, points at a wrong line in four, and abstains in
+none. A separate `-n 3` invocation finds it in the top three in 31/34. JSON stdout contains
+99.76% fewer estimated tokens than the full logs; p50 latency is 0.87 s on a loaded machine.
+These are development-set payload and retrieval measurements, not agent task success or total
+inference cost. [Cases, limits and baselines](../../../../benchmarks/why-ci.md).
+
 ## The verbs
 
 Each situation below has one complete command. Reach for it at the moment you would otherwise

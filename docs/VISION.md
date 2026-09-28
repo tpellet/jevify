@@ -77,8 +77,8 @@ everyone and four concurrent requests. TypeSafe uses the caller's credits. Spent
 
 ## Prove the useful cases
 
-On 2026-09-28, TypeSafe puts the root-cause line first in 28 of 34 failed GitHub Actions runs
-from 30 public repositories, and points at a wrong line in six. The
+On 2026-09-28, TypeSafe puts the root-cause line first in 30 of 34 failed GitHub Actions runs
+from 30 public repositories, and points at a wrong line in four. The
 [benchmark](../benchmarks/why-ci.md) defines the sample, labels and baselines. Its output token
 saving measures the payload an agent reads, not agent task success or total inference cost.
 
