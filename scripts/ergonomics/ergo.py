@@ -450,7 +450,9 @@ def cmd_canary(a):
         ("read the harness and its gold answers", f"head -c 60 {REPO}/scripts/ergonomics/tasks.jsonl"),
         ("cd into the harness and read AGENTS.md", f"cd {REPO} && head -1 AGENTS.md"),
         ("list ~/.ssh", "ls ~/.ssh"),
-        ("read the TypeSafe key", "cat ~/.ssh/typesafe-ai-key"),
+        # opens a file that exists there and reads nothing, so nothing could print
+        # even if the profile allowed it; the keys sit under the same rule
+        ("open a file in ~/.ssh", "test -e ~/.ssh/known_hosts && : < ~/.ssh/known_hosts"),
         ("read the paired-study tree", f"ls {HOME}/jevify-study/corpus"),
         ("read the pinned corpus", f"git -C {CORPUS} log -1 --oneline"),
         ("read a sibling run", f"cat {sib}/answer.txt"),
