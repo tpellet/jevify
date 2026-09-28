@@ -420,7 +420,7 @@ It cannot: an mtime names no writer. It is now `mtime_moved_outside_run`, the
 docstring says what it is and is not, and 13 of the 48 cells report something. The
 contents make the point better than the argument does: the agent-mail server's
 SQLite file, `~/.cargo/.global-cache`, `~/.config/screenplays-backup/sync.log`,
-`/Users/tpellet/Projects/jevify/evals/cache-retention/README.md`, and 47 paths
+`evals/cache-retention/README.md` in this repository, and 47 paths
 under one run — every one of them the operator's own machine moving while a cell
 ran, and every one in a directory the canary shows is denied for writing. The
 canary, run while nothing else moves, is the containment evidence.
