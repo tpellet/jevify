@@ -48,14 +48,17 @@ Run the gate and every `git commit`/`git push` with the sandbox disabled: wiremo
 127.0.0.1 and SSH signing needs `~/.ssh`, both sandbox-denied. Never `#[ignore]`, weaken or
 delete a test to get past a sandbox failure.
 
-Live tests (`tests/live.rs`, all `#[ignore]`):
+End-to-end tests (`tests/e2e.rs`, all `#[ignore]`: the real binary, the live backend, real
+repositories and logs, gold answers):
 
 ```bash
-TYPESAFE_API_KEY_FILE=$HOME/.ssh/typesafe-ai-key cargo test --test live -- --ignored --test-threads=1
+TYPESAFE_API_KEY_FILE=$HOME/.ssh/typesafe-ai-key cargo test --test e2e -- --ignored --test-threads=1
 ```
 
 Without a key they print `SKIPPED: set TYPESAFE_API_KEY_FILE=...` and return; a hand-off lists
-them as NOT RUN, never as passed.
+them as NOT RUN, never as passed. The keyless half runs only with `JEVIFY_E2E_KEYLESS=1`, so no
+default run spends classifier.dev's free per-IP budget. No release ships unless this suite
+passes on the TypeSafe backend, known misses excepted and named in the release notes.
 
 The transcripts of `README.md` and `docs/guide/getting-started.md` have their own live check
 (`tests/transcripts.rs`, all `#[ignore]`), which runs every documented command and compares the
@@ -75,11 +78,16 @@ The scheduled `transcripts` workflow runs the keyless half weekly.
 
 ## Testing
 
-- Every module with pure logic has inline `#[cfg(test)]` unit tests: happy path, edge cases
-  (empty input, the 200/255-option limits, huge input), error conditions. Thin orchestration
-  modules are covered by the contract tests in `tests/` instead.
-- Every verb has a contract test on exit code and the `--json` envelope using
-  `tests/common::FakeJev` (wiremock). No live network in the default test run.
+- Owner decision 2026-09-28: end-to-end tests with real data prove behaviour; unit tests are the
+  exception. `tests/e2e.rs` runs the real binary against the live backend on real repositories
+  and logs, with gold answers, and asserts the decision and the chosen item, never a
+  probability. Run it after any change to what a verb selects (command below).
+- A unit or contract test earns its place only when it guards a contract that an end-to-end run
+  cannot check cheaply: exit codes, the `--json` envelope and error kinds, marker parsing, `fill`
+  execution safety, redaction and host pinning, byte-exact records, backend request limits,
+  HTTP status mapping, the deadline. The list is `docs/superpowers/plans/2026-09-28-refocus.md`,
+  "Keep list". No test pins a tuning constant (window sizes, request counts, finalist counts).
+- Contract tests use `tests/common::FakeJev` (wiremock). No live network in the default test run.
 - Tests run single-threaded (`--test-threads=1`): integration tests spawn the binary with
   per-process env; one thread keeps wiremock ports and stdin handling deterministic.
 
