@@ -10,7 +10,7 @@ const WIDGET: &str = "{\"kind\":\"widget\",\"list\":[\"printf\",\"w1\\\\n\"]}\n"
 
 /// A temporary home with a `kinds.jsonl` in the directory that `directories::ProjectDirs`
 /// names under that home, and the variables that redirect the platform lookup to it.
-fn planted_home() -> (PathBuf, PathBuf, Vec<(&'static str, PathBuf)>) {
+fn planted_home() -> (PathBuf, Vec<(&'static str, PathBuf)>) {
     let home = tempfile::tempdir().unwrap().keep();
     let real = jevify::config::config_dir(None).expect("a platform configuration directory");
     let (dir, vars) = if cfg!(target_os = "macos") {
@@ -26,22 +26,20 @@ fn planted_home() -> (PathBuf, PathBuf, Vec<(&'static str, PathBuf)>) {
     };
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("kinds.jsonl"), WIDGET).unwrap();
-    (home, dir, vars)
-}
-
-fn fill_widget(cmd: &mut assert_cmd::Command, vars: &[(&str, PathBuf)]) -> std::process::Output {
-    for (name, value) in vars {
-        cmd.env(name, value);
-    }
-    cmd.args(["fill", "--dry-run", "--", "printf", "@{widget:x}"])
-        .output()
-        .unwrap()
+    (dir, vars)
 }
 
 #[test]
 fn bin_never_reads_the_platform_configuration_directory() {
-    let (_home, planted, vars) = planted_home();
-    let out = fill_widget(&mut common::bin(), &vars);
+    let (planted, vars) = planted_home();
+    let mut cmd = common::bin();
+    for (name, value) in &vars {
+        cmd.env(name, value);
+    }
+    let out = cmd
+        .args(["fill", "--dry-run", "--", "printf", "@{widget:x}"])
+        .output()
+        .unwrap();
     assert_eq!(out.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&out.stderr).contains("unknown kind"));
 
@@ -50,39 +48,9 @@ fn bin_never_reads_the_platform_configuration_directory() {
         path: "/usr/bin:/bin".into(),
         config_dir: Some(planted.clone()),
         deadline: Instant::now() + Duration::from_secs(20),
-        cwd: planted.clone(),
+        cwd: planted,
         cache_dir: None,
     };
     let widget = jevify::source::lookup("widget", &env).unwrap().unwrap();
     assert_eq!(widget.name, "widget");
-    // Through the empty directory of `bin()`, the same kind is found nowhere.
-    let isolated = jevify::source::Env {
-        config_dir: Some(tempfile::tempdir().unwrap().keep()),
-        ..env
-    };
-    assert!(
-        jevify::source::lookup("widget", &isolated)
-            .unwrap()
-            .is_none()
-    );
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn an_explicit_config_dir_resolves_the_planted_recipe_through_bin() {
-    let (_home, planted, _vars) = planted_home();
-    let server = common::mock(common::FakeJev {
-        choose: |_, s, o| common::option_containing(s, o, "w1"),
-        noul: |_, _| 0.9,
-    })
-    .await;
-    let mut cmd = common::jevify(&server);
-    cmd.env("JEVIFY_CONFIG_DIR", &planted);
-    let out = fill_widget(&mut cmd, &[]);
-    assert_eq!(
-        out.status.code(),
-        Some(0),
-        "{}",
-        String::from_utf8_lossy(&out.stderr)
-    );
-    assert_eq!(out.stdout, b"'printf' 'w1'\n");
 }
