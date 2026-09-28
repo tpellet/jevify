@@ -28,7 +28,7 @@ Output verbs start no user command; callers authorize staging and file moves.
   inventory, `man`) goes through `tokio::task::spawn_blocking` or `std::thread::scope` so the
   runtime keeps driving in-flight HTTP.
 - Dependencies: explicit versions, minimal set, prefer std. Adding a crate needs a one-line
-  justification in the commit body. `toon-format` must stay `default-features = false`.
+  justification in the commit body.
 - Verify third-party APIs against docs.rs or the downloaded crate source, not memory.
 - macOS and Linux only for v0.
 
@@ -145,9 +145,9 @@ because `~/.ssh` is sandbox-denied.
 
 ### Agent-facing contract (do not break without updating capabilities + docs + tests)
 
-Exit codes 0 ok · 1 no · 2 usage · 3 abstain · 4 unavailable · 5 auth · 6 input · 7 reserved
-(no verb reports a child command's failure) · 130 declined (`add` confirmation; `sort` has no
-confirmation prompt). Machine envelope: `{ok, command, version, exit_code, data, meta, error}`
+Exit codes 0 ok · 1 no · 2 usage · 3 abstain · 4 unavailable (`quota_exhausted` included) ·
+5 auth · 6 input · 130 declined (a person answering no at `add`'s prompt). No verb reports a child
+command's failure. On exit 3, `data.shortlist` lists the nearest candidates. Machine envelope: `{ok, command, version, exit_code, data, meta, error}`
 with `error{kind, message, hint, example}`. Error `kind` strings are stable identifiers.
 New verbs update `cli.rs`, dispatch, `capabilities()`, `docs/ROBOT_MODE.md`, README, a
 PRIVACY.md row, and tests.

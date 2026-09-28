@@ -1,6 +1,6 @@
 ---
 name: jevify
-description: Use the jevify CLI when a question is about meaning and a literal search cannot answer it. Fill command arguments from branches, commits, files, PRs, CI runs, pods, piped candidates or context-dependent options; get a handle with pick --from. Find the cause in a long failure log, filter records or files, label every record with one of your tags, pick a record, branch on a fact or discover an unfamiliar tool. Stage hunks or propose folders when requested. Do not use for already-known values, counting, arithmetic, quality judgments, generating text or security decisions.
+description: Find the line that explains a failure, or the ID you can describe but cannot name. Fill command arguments from real branches, commits, files, PRs, runs or supplied candidates; pick --from returns the handle alone. Filter or label records, branch on a fact, or stage authorized hunks. Use literal tools for known values, counting and arithmetic. Never generate text or make security decisions.
 ---
 
 # jevify
@@ -35,9 +35,8 @@ only to choose from it by eye.
 | Every record or file needs a bucket | `ls reports/*.md \| jevify label --files bug,feature,docs` | Each record with its label, `?` when unsure; one call, not one read per file |
 | One record or file out of many, described rather than named | `git ls-files \| jevify pick --files 'guards downloads against internal addresses'` | A selected input record, or abstention |
 | The next step depends on a fact | `cargo test 2>&1 \| jevify is 'every failure is a network timeout' && cargo test` | An exit code, like `test` |
-| An unfamiliar task in the long tail of a large PATH | `jevify route 'render a terminal demo from a tape file'` | An installed tool and its summary; nothing executes |
+| An unfamiliar task in the long tail of a large PATH | `jevify pick --from tool 'render a terminal demo from a tape file'` | An installed tool; nothing executes |
 | Requested staging of one topic | `jevify add --dry-run 'the token expiry fix'` | Scores or stages individual hunks |
-| Requested organization of files with opaque names | `jevify sort ~/Downloads` | Proposes existing destination folders; moves only with `--apply` |
 
 ```sh
 cargo build 2>&1 | jevify why
@@ -50,9 +49,8 @@ gh pr list --json number,title | jq -c '.[]' | jevify filter 'touches the instal
 cargo test 2>&1 | jevify is 'every failure is a network timeout' && cargo test
 until kubectl get pods | jevify is 'every pod is ready'; do sleep 5; done
 jevify is 'asks for a refund' 'mentions an order' --context mail.txt
-jevify route 'keep my mac awake for an hour'
+jevify pick --from tool 'keep my mac awake for an hour'
 jevify add --json --dry-run 'the token expiry fix'
-jevify sort --json ./Downloads
 ```
 
 `pick` and `filter` print input records byte for byte; `label` prints `LABEL<TAB>RECORD`, the
@@ -118,8 +116,9 @@ records (`-`). The kinds that exist: `branch` (local and remote refs with subjec
 literal prefix ending in `/`), `tool` (the PATH), and the recipes `pr`, `issue`, `ci-run`,
 `stash`, `process`, `container`, `pod` (the owning tool's listing, one line per candidate).
 `jevify capabilities --json` lists every kind with its exact lister argv, including the user's
-own recipes from `kinds.jsonl` under `JEVIFY_CONFIG_DIR`; a recipe is one JSON line with
-`kind`, `list` and `field` or `key`, never read from a repository. `-` uses stdin or
+own recipes from `kinds.jsonl` under explicit `JEVIFY_CONFIG_DIR`; a recipe is one JSON line with
+`kind`, `list` and `field` or `key`, never read from the cwd or platform configuration directory.
+A user recipe cannot shadow a shipped kind. `-` uses stdin or
 `--candidates FILE`, with `--field N` or `--key KEY` to name a handle inside the evidence. A
 list with no kind is a pipe into `'@{-:…}'`, shaped by `sed`, `cut` or `jq` first.
 `one` and `flag` judge stdin or `--context FILE`. stdin has one role; supply the other with a file.
@@ -154,7 +153,6 @@ than two rounds of model requests.
 | 4 | Backend unavailable: read the line for the quota or model problem |
 | 5 | Authentication: check backend and key configuration |
 | 6 | Input error: check the input; for `too_many`, narrow with `grep` or `head` |
-| 7 | Reserved |
 | 130 | Declined |
 
 For `fill`, exits 2–6 mean nothing ran; after execution the command owns its exit code, including
@@ -186,18 +184,22 @@ name appears as `unknown` in `meta.model` and refuses too. This guard also appli
 when all statements hold, 1 when any is no, and 3 otherwise. Oversized `is` input abstains
 without a model call. Do not retry unchanged evidence to turn uncertainty into certainty.
 
-For exit 4, “daily quota of the free backend reached” means the daily quota is exhausted;
-immediate retries or lower concurrency do not restore it. Read the model information as well.
+`quota_exhausted` (exit 4) means TypeSafe credits or classifier.dev's free budget are spent;
+it is never retried. The free budget is $0.50 per IP per UTC day, subject to $100 per day
+across everyone and four concurrent requests. A per-request spending limit is
+`input_too_large` (exit 6): narrow the request. `health` makes a small uncached classification
+and detects exhaustion through these errors; it consumes backend budget.
 
-Use `--json` when you need scores or structured errors; leave it off for record pipelines and
+Use `--json` for one envelope on one line when you need scores or structured errors; leave it off for record pipelines and
 silent predicates. The envelope is `{ok, command, version, exit_code, data, meta, error}`;
 `error` contains `kind`, `message`, `hint`, and `example`. Branch on the process exit code or
-`exit_code`, then inspect `data`. The installed contract is available with
-`jevify capabilities --json` and `jevify robot-docs guide`.
+`exit_code`, then inspect `data`. An abstention's `data.shortlist`, where present, contains
+candidates with scores and evidence, not chosen answers. `jevify capabilities --json` prints
+the compact installed contract; [ROBOT_MODE.md](../../../../docs/ROBOT_MODE.md) gives details.
 
 ## Permissions and privacy
 
-Allow the output verbs (`why`, `pick`, `filter`, `label`, `is`, `route`) freely. They do not execute the
+Allow the output verbs (`why`, `pick`, `filter`, `label`, `is`) freely. They do not execute the
 tool they select. Check the selected tool's help and write its arguments yourself.
 Allow `jevify fill --dry-run` freely. Allow `fill` per command prefix
 (`jevify fill -- git switch:*`), exactly as the command itself is allowed. jevify is not a
@@ -205,9 +207,9 @@ permission system. The description, option context and candidates' evidence leav
 with best-effort redaction; `fill` starts the command the caller wrote.
 
 `add` changes the index, never commits. Inspect `--dry-run` first; use `--yes` only when
-staging is authorized. It rejects oversized hunks instead of clipping evidence. `sort` proposes
-by default; `--apply` requires authorization to move files. Keep its JSONL recovery log and
-reported progress if a move fails.
+staging is authorized. It rejects oversized hunks instead of clipping evidence. A
+noninteractive call without `--yes` or `--dry-run` exits 2; a person declining the interactive
+confirmation exits 130.
 
 Evidence goes to the configured API with best-effort masking. Do not supply secrets.
 `why` and `filter` also save the raw input locally, secrets included, and print the saved path
@@ -234,12 +236,13 @@ of head and tail, so a cause in the cut middle needs `cmd 2>&1 | jevify why` on 
 
 In GitHub Actions, the repository's `action.yml` installs jevify and writes the pointed line to
 the job summary; it writes nothing on abstention and never fails the job. `shell: bash` gives
-the step pipefail, so it fails with the build rather than with `tee`:
+the step pipefail, so it fails with the build rather than with `tee`. Replace `<tag>` with a
+release tag containing the action:
 
 ```yaml
 - run: cargo test --locked 2>&1 | tee build.log
   shell: bash
 - if: failure()
-  uses: tpellet/jevify@main
+  uses: tpellet/jevify@<tag>
   with: { log: build.log }  # optional: typesafe-api-key
 ```

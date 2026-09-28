@@ -2,16 +2,16 @@
 
 ## Install
 
-With Rust 1.87 or newer, on macOS or Linux:
-
-```sh
-cargo install jevify --locked
-```
-
-The shell installer is also available:
+On macOS or Linux, no Rust needed:
 
 ```sh
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/tpellet/jevify/releases/latest/download/jevify-installer.sh | sh
+```
+
+With Rust 1.87 or later:
+
+```sh
+cargo install jevify --locked
 ```
 
 Build from `main` with `cargo install --git https://github.com/tpellet/jevify --locked jevify`.
@@ -19,7 +19,8 @@ Build from `main` with `cargo install --git https://github.com/tpellet/jevify --
 ## No key needed
 
 Without a key, jevify asks [classifier.dev](https://classifier.dev), which serves Jev free and
-without an account: 20,000 classifications a day per IP. A TypeSafe key uses your own quota:
+without an account: $0.50 per IP per UTC day, subject to $100 per day across everyone and
+four concurrent requests. A TypeSafe key uses your own credits:
 
 ```sh
 export TYPESAFE_API_KEY_FILE=/path/to/key
@@ -33,13 +34,13 @@ backends give the same verbs and exit codes; their probabilities are not the sam
 jevify health
 ```
 
-`health` names the backend, whether it has a key, and the response time: exit 0 reachable,
-4 unavailable, 5 missing or rejected TypeSafe key.
+`health` makes a small uncached classification: exit 0 answered, 4 unavailable or exhausted
+quota/credits, 5 missing or rejected TypeSafe key. It consumes backend budget.
 
 ## First commands
 
 The fixtures live in [docs/demo](../demo) of the repository; `bash docs/demo/examples.sh`
-runs every example of the README.
+runs the local fixture examples.
 
 Find the error in a failed build. On a live build, pipe both streams, since compilers write
 errors to stderr: `cargo build 2>&1 | jevify why`.
@@ -173,19 +174,14 @@ jevify pick --from branch 'the auth refactor'
 [Verbs](verbs.md#fill) covers escaping and the exact input rules; [Kinds](kinds.md) lists every
 kind and how to add your own.
 
-## The comma alias
-
-`init` prints shell integration and edits no profile. The comma alias calls `route`, which
-prints the installed tool for a task and starts nothing:
+## Find an installed tool
 
 ```sh
-eval "$(jevify init zsh)"
-, "what's using port 8080"
+jevify pick --from tool 'keep my mac awake for an hour'
 ```
 
-`jevify init bash` is the bash form. The zsh alias includes `noglob`. Quote requests with
-apostrophes. With `JEVIFY_CNF=1` and no other handler, the snippet also passes unknown commands
-of three or more words to `route`; shorter unknown commands return 127.
+The `tool` kind selects from PATH summaries and finalist man-page evidence. It prints a
+handle and starts no user command. `jevify init agents` prints instructions for an agent.
 
 ## Scripting on exit codes
 
@@ -202,7 +198,7 @@ unsure and backend errors need different handling. Check a `pick` call's exit co
 output becomes an argument: on abstention the output is empty, and an empty argument is one
 that many commands accept.
 
-The codes are 0 ok, 1 no, 2 usage, 3 abstain, 4 unavailable, 5 auth, 6 input, 7 reserved and
+The codes are 0 ok, 1 no, 2 usage, 3 abstain, 4 unavailable, 5 auth, 6 input and
 130 declined at the `add` confirmation. [Verbs](verbs.md) lists the data and flags of each
 command. `--json` gives one machine envelope; [Agents](agents.md) describes it. `fill --json`
 requires `--dry-run`. `fill` exits 2 to 6 when nothing ran; once the command runs, the exit

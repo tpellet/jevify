@@ -27,17 +27,17 @@ jevify fill -- gh run view --log-failed '@{ci-run:the failed run for the commit 
 | `branch` | local and remote refs | name, last commit subject, age; a remote ref folds into its local twin, and a branch that exists only on one remote is its short name (`ticket/TPE-791`), with the ref in its evidence. A literal prefix (`'origin/@{branch:…}'`) scopes the listing to that remote's refs; which form to write is under [Coded kinds and recipe kinds](#coded-kinds-and-recipe-kinds) |
 | `commit` | the log of the current branch | subject; finalists add body, changed paths and the diffstat with the start of the patch, 1,000 characters of it |
 | `file`, `dir` | tracked and untracked files that are not ignored, hidden ones included | path; `file` finalists add first lines, `dir` finalists the names of their first children |
-| `tool` | the commands on the PATH, for `route` and `pick --from tool` | name and one-line manual summary |
+| `tool` | commands on PATH, or `JEVIFY_INVENTORY_FILE` | name and one-line manual summary; finalist man-page evidence |
 | `pr`, `issue`, `ci-run`, `stash`, `process`, `container`, `pod` | a recipe: the owning tool's listing | the whole line of the listing |
 | `one`, `flag` | options written in the marker | stdin, or `--context FILE` |
 
-`file` and `dir` always run their finals: the excerpts are read before anything runs, which
+`file` and `dir` always run their finals, including with `pick --from`: excerpts precede selection, which
 is where a phrase that describes a file's content and not its name is decided. A names-only
 answer to such a phrase can be confident and wrong: on the held-out content phrases of
 `evals/fill/finals/` a decisive names round with the rest of the field out of play still
 chose a file named for the concept and holding something else, once per twelve to fifteen
 such rounds on each backend (`benchmarks/results.md`), and `fill` is the verb whose choice
-reaches a command. `commit` always runs its finals for the same reason, one step further
+reaches a command. `commit` always runs its finals, including with `pick --from`, one step further
 along: a subject line is a claim about a change, and the commit that makes the claim need not
 be the commit that holds the change. On the 20 lying-subject cases of `evals/commit-subjects/`,
 where a documentation commit announces a change a dull-sounding commit actually made, the
@@ -104,14 +104,14 @@ is one appended line, and a recipe is shared by copying it.
 
 ## Where kinds.jsonl lives
 
-The user's recipes live in `kinds.jsonl` in the configuration directory: `JEVIFY_CONFIG_DIR`,
-or the platform configuration directory (`~/Library/Application Support/jevify` on macOS,
-`$XDG_CONFIG_HOME/jevify` or `~/.config/jevify` on Linux). A missing file holds no recipes.
+The user's recipes live in `kinds.jsonl` under explicit `JEVIFY_CONFIG_DIR`. No platform
+configuration directory is read. An unset variable or missing file holds no user recipes.
 
 ```sh
-mkdir -p "${JEVIFY_CONFIG_DIR:-$HOME/.config/jevify}"
+export JEVIFY_CONFIG_DIR="$HOME/.config/jevify"
+mkdir -p "$JEVIFY_CONFIG_DIR"
 printf '%s\n' '{"kind":"vm","list":["multipass","list","--format","csv"],"field":1}' \
-  >> "${JEVIFY_CONFIG_DIR:-$HOME/.config/jevify}/kinds.jsonl"
+  >> "$JEVIFY_CONFIG_DIR/kinds.jsonl"
 ```
 
 - jevify reads no recipe from a repository or the working directory. A clone never adds a
@@ -141,8 +141,8 @@ printf '%s\n' '{"kind":"vm","list":["multipass","list","--format","csv"],"field"
   `src/cmd/`, and `'--config=conf/@{file:the staging profile}'` under `conf/`. The prefix is
   the text before the marker when it ends with `/`. A prefix that names no directory is
   `lister_failed`.
-- Candidates come from the directory jevify runs in. `cd DIR && jevify fill …` changes it.
-  jevify never reads the scope out of the tool's own flags.
+- Candidates come from the directory jevify runs in. `-C DIR` changes it, and a wrapped
+  `git -C DIR` also scopes the listers.
 - Hidden files are listed; `.git/` never is. An excerpt is never read for a path with a
   component that matches `.*`, `id_*`, `*.pem`, `*.key`, `*credentials*` or `*secret*`, nor
   for a symlink. The status line says `excerpts withheld: N`. The name still reaches the

@@ -684,8 +684,8 @@ async fn an_abstention_prints_nothing_and_names_the_nearest_as_not_chosen() {
         .unwrap();
     let value = envelope(&out, 3);
     assert_eq!(value["data"]["matches"], json!([]));
-    assert_eq!(value["data"]["closest"][0]["text"], "alpha");
-    assert_eq!(value["data"]["closest"][0]["p"], 0.27);
+    assert_eq!(value["data"]["shortlist"][0]["text"], "alpha");
+    assert_eq!(value["data"]["shortlist"][0]["p"], 0.27);
     assert!(value["data"]["hint"].is_string());
 }
 

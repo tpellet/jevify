@@ -19,13 +19,72 @@ Changed:
   repository names the directory it ran in and the repositories below it. An unknown verb names
   the nearest verb, the installed version and `cargo install jevify`.
 - An abstention names its nearest candidates as `nearest (not chosen)`, with scores and a hint,
-  in `pick`, `why`, `add` and `fill`; `pick`'s envelope adds `closest` and `hint`. An agent had
+  in `pick`, `why`, `add` and `fill`; `pick`'s envelope adds `shortlist` and `hint`. An agent had
   answered with a 0.27 candidate from the old `closest:` line.
 - A bare `@{branch:...}` in a git subcommand that reads a revision (`log`, `show`, `diff`, ...)
   becomes the remote ref of a branch that exists only on a remote, which git resolves; `switch`
   and `checkout` keep the short name.
 - `add` without `--yes` and without a terminal declines (exit 130) before any classification.
 - `sort` accepts one file, sorted alone among the folders beside it or under `--into`.
+
+Removed:
+
+- `sort`, `route` (use `pick --from tool`), the `robot-docs` command, `init zsh|bash`,
+  the comma alias and command-not-found hook, `--format`, cost-estimate fields,
+  `JEVIFY_PRICE_PER_MTOK`, and reserved exit 7. `docs/ROBOT_MODE.md` remains the handbook.
+
+Changed:
+
+- `why` and `fill` lead the README, with the binary installer first and no Rust requirement.
+- Selection uses one abstention rule, including stdin `pick` near ties. `pick --from` reads
+  evidence for commit, file and directory finalists; finalist evidence budget follows rank.
+- `--json` emits one line. `capabilities` is compact and `init agents` fits one screen.
+  Noninteractive `add` without `--yes` or `--dry-run` is usage error 2, not decline 130.
+- Spent TypeSafe credits or classifier.dev budget produce `quota_exhausted` (exit 4), never
+  retried. A per-request spending limit is `input_too_large` (exit 6). The free service budget
+  is $0.50 per IP per UTC day, subject to $100 per day across everyone and four concurrent
+  requests; 20,000 remains an input record ceiling, not a daily quota.
+
+Added:
+
+- Claude Code Bash `PostToolUseFailure` hook: `why` supplies a cause for long failed output.
+- GitHub Action: `uses: tpellet/jevify@<tag>` writes a `why` answer to the job summary.
+- Abstention shortlists expose candidates with scores and evidence without selecting them.
+  `health` makes a small uncached classification to detect quota or credit exhaustion.
+
+Measured:
+
+- On 2026-09-28, TypeSafe puts the root-cause line first in 28 of 34 failed GitHub Actions
+  runs from 30 public repositories, and in the top three in 30. It points at a wrong line in
+  six first-line runs. Tail finds a gold line in 10, grep in 11; JSON output has 99.7% fewer
+  estimated tokens than the full logs, with median latency 0.84 s (`benchmarks/why-ci.md`).
+  Token reduction describes downstream payload, not total inference cost or agent task success.
+- On the same date and backend, `fill` resolves bat PR #4018 among 1,000 open and closed PRs
+  in 6.9 s, with 424× fewer bytes than reading the listing.
+
+## 0.14.0 - 2026-09-28
+
+Documents:
+
+- What each store in the cache directory keeps is written down, and which switch stops it.
+  The answer cache holds only the model name, the probabilities and the chosen option: no record
+  text, excerpt, path or question reaches disk, and the request survives only as the hash in the
+  file name. A marker planted in every input across all nine caching verbs appeared in the two
+  saved-input files and in none of the thirty answer files. `capabilities` gains `answer_cache`.
+  Two switch facts the documents had wrong: `--no-cache` relocates `sort --apply`'s recovery
+  journal to the system temporary directory rather than suppressing it, and the `tool` kind's
+  inventory bypasses the switch entirely (`evals/cache-retention/`).
+
+Measured:
+
+- Whether an agent reaches for jevify, measured apart from whether it helps. Over eight tasks a
+  script proved lexical search cannot answer, an agent given jevify and told about it once reached
+  for it in 11 of 16 runs, against none of six on an easier set; where it was told to use the tool
+  and the tool named the answer, the agent adopted that answer 15 times of 15 and never overrode
+  it. On correctness the three arms are indistinguishable, 15 of 16, 14 of 16 and 16 of 16 with
+  intervals overlapping over most of their range, so no correctness gain is claimed at this sample
+  size, and the cheaper resource profile of the choose-for-yourself arm is not claimed as an effect
+  because one run of sixteen moves its total by a third (`benchmarks/agents/ADOPTION.md`).
 
 ## 0.13.0 - 2026-09-24
 

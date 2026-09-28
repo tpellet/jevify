@@ -1,5 +1,5 @@
 #!/bin/bash
-# Runs every example of README.md, in README order, on the fixtures of this directory and on
+# Runs local fixture examples from the getting-started guide and this directory, and from
 # this repository's own history. Run it from any directory on a typical macOS dev machine
 # with jevify on the PATH; the free backend answers without a key, and
 # TYPESAFE_API_KEY_FILE=/path/to/key selects TypeSafe.
@@ -45,7 +45,7 @@ is() {
 try() {
     show "printf 'build started\nerror: connection timed out\nbuild stopped\n' | jevify filter --strict 'reports a network failure'"
     show "git ls-files | jevify pick --files 'where the command-line flags are defined'"
-    show "jevify route 'keep my mac awake for an hour'"
+    show "jevify pick --from tool 'keep my mac awake for an hour'"
 }
 
 want=${1:-all}

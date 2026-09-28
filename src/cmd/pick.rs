@@ -221,7 +221,7 @@ pub async fn run(
         });
         let hint = super::abstain_hint(&ranking, ctx.threshold, super::DESCRIBE_THE_RECORD);
         eprintln!("{}", super::abstain_line("pick", reason, &closest, &hint));
-        data["closest"] = closest_json(&closest);
+        data["shortlist"] = closest_json(&closest);
         data["hint"] = hint.into();
     }
     Ok(Outcome {
@@ -381,7 +381,7 @@ async fn from_kind(
     }
     let mut data = serde_json::json!({"matches": matches, "reason": reason, "any": ranking.any, "source": name, "candidates": count, "total": listing.total, "omitted": listing.omitted, "windows": windows, "finalists_per_window": n});
     if let Some(hint) = hint {
-        data["closest"] = closest_json(&closest);
+        data["shortlist"] = closest_json(&closest);
         data["hint"] = hint.into();
     }
     Ok(Outcome {
@@ -396,7 +396,7 @@ async fn from_kind(
     })
 }
 
-/// `data.closest` of an abstention: `[{text, p}]`, best first.
+/// `data.shortlist` of an abstention: `[{text, p}]`, best first.
 fn closest_json(closest: &[(String, f64)]) -> serde_json::Value {
     closest
         .iter()

@@ -1,190 +1,100 @@
 # Agents
 
-Use jevify when a literal search cannot ask the question or the output is too long to read.
-Cheap tools narrow the input first. `why` points to a cause, `pick` selects a record, `filter`
-keeps a subset, `label` tags every record, and `is` decides whether the next step should act.
-On the input side, `fill` resolves real arguments and runs the command you wrote;
-`pick --from KIND` returns the handle alone. `capabilities.kinds` lists every kind with the
-command that lists it, user recipes included; see [Kinds](kinds.md).
+Use `why` when a failure log is too long to read, and `fill` when a command needs a handle
+you can describe but cannot name. Cheap tools narrow the input first. Use one process for
+many records, rather than reading each file or asking about each line in a loop.
 
 ```sh
-jevify capabilities --json
 jevify init agents
-jevify robot-docs
+jevify capabilities --json
 ```
 
-`capabilities` is the source of truth for commands, usage, exit codes, data and limits.
-`init agents` derives its bounded instruction block from that table: one line per verb that
-pairs the situation with a complete command, the kinds, the quoting habit and the exit codes.
-The [robot handbook](../ROBOT_MODE.md) includes the full telemetry and recovery contract.
+`init agents` prints a short instruction block. `capabilities` describes the compact installed
+interface. The [robot contract](../ROBOT_MODE.md) defines fields, telemetry and recovery.
 
 ## Situations
 
-An agent reaches for jevify at the moment it would otherwise run a listing only to choose from
-it by eye, or read a long output or many files one by one. Each situation has one command.
-
-| Situation | Command |
+| Need | Command |
 |:---|:---|
-| Which branch holds some work | `jevify fill -- git log -1 --format=%H 'origin/@{branch:the allergy model and its schema migration}'` (a revision takes the prefixed form; `git switch '@{branch:…}'` takes the bare one) |
-| Which commit did something | `jevify fill -- git show '@{commit:restricted the correction to the primary metrics}'` |
-| Which CI run failed, and why | `jevify fill -- gh run view --log-failed '@{ci-run:the failed run on tag v0.7.0}' \| jevify why` |
-| The cause in a long log | `jevify why < ci.log`, then read the numbered cause, not the whole log |
-| Which source file does something | `git ls-files \| jevify pick --files 'guards agent downloads against internal addresses'` |
-| Which tests cover a topic | `fd -0 -e rs \| jevify filter -0 --files 'tests backend throttling'` |
-| Sort many reports into buckets | `ls reports/*.md \| jevify label --files bug,feature,docs` |
-| Which installed tool does a task | `jevify route 'render a terminal demo from a tape file'` |
-| Only the handle, no command | `jevify pick --from commit 'restricted the correction to the primary metrics'` |
+| Cause of a failed CI run | `gh run view <id> --log-failed \| jevify why` |
+| Commit by what it did | `jevify fill --dry-run -- git show '@{commit:fixes retry backoff}'` |
+| Branch by description | `jevify fill --dry-run -- git switch '@{branch:the auth refactor}'` |
+| File by content | `git ls-files \| jevify pick --files 'where retries back off'` |
+| Installed tool by task | `jevify pick --from tool 'render a terminal demo from a tape file'` |
+| Only the handle | `jevify pick --from pr 'the Windows path fix'` |
+| Relevant records | `gh issue list \| jevify filter 'reports a crash'` |
+| Labels for many records | `gh issue list \| jevify label bug,feature,question` |
+| Predicate for the next action | `jevify is 'asks for a refund' --context mail.txt` |
 
-The kinds a marker or `pick --from` can name are `branch`, `commit`, `file`, `dir`, `tool`,
-`pr`, `issue`, `ci-run`, `stash`, `process`, `container`, `pod`, `-` for piped candidates, and
-the caller-written options `one` and `flag`; see [Kinds](kinds.md).
+## Machine output
 
-## One envelope
-
-`--json` (alias `--robot`) prints one envelope on stdout, usage errors included. `--format jsonl`
-prints it on one line; `--format toon` encodes the same envelope as TOON.
-`fill` requires `--dry-run` with every machine format; successful resolution supplies `data.argv`.
+`--json` (alias `--robot`) prints one envelope on one line, including usage errors:
 
 ```text
-{ok, command, version, exit_code, data,
- meta{backend, model, elapsed_ms, requests, cache_hits, input_tokens, cost_usd,
-      threshold, request_id, usage, telemetry, decision},
- error{kind, message, hint, example} | null}
+{ok, command, version, exit_code, data, meta, error{kind,message,hint,example} | null}
 ```
 
-`meta.decision` holds the scores every decision was made with; `JEVIFY_DECISION=round_one`
-adds `round_one`, every candidate of every window and the finals as sent, which an ordinary
-envelope leaves out. ROBOT_MODE.md states both.
-
-`ok` is not the field to branch on. It says only that jevify itself reached the end without an
-error of its own, so it is true on exit 0, true on exit 1 where `is` answers no, and true on
-exit 3 where a verb abstains and the `data` a caller expects is absent.
-Branch on `exit_code`, which equals the process status, then read `data`. Error kinds are stable
-identifiers. `too_many` is exit 6: narrow records with `grep` or `head`. `error.example` gives
-a corrected command. Human output is not a machine protocol.
-
-`fill` abstention is exit 3 with `error: null`. `data.reason` is the first failed marker in argv
-order; `data.markers[].reason` reports every marker. Reasons are `no_match`, `ambiguous`,
-`unsure_flag`, `insufficient_evidence`. They are separate from the exit-6 error kinds
-`empty_input`, `input_too_large`, `api_rejected_request`, `input`, `too_many`, `stdin_is_tty`,
-`lister_failed`, `cannot_run`, `recipe_invalid` and `status_file_unwritable`.
-`capabilities.error_kinds` enumerates every kind with its exit code, so branches come from the
-machine interface rather than from the sources.
-Read candidates N of M for no match; read the two handles for ambiguity; write or drop an unsure
-flag. Narrow oversized lists with a prefix, `grep`, `head` or a pipe; run failed listers yourself.
-`lister_failed` carries the tool's own text; `recipe_invalid` names the line of the user's
-`kinds.jsonl`. The `fill` status line of a resolved marker reads
-`candidates N[ of M[, newest first]][, omitted K], windows W[, excerpts withheld: E]`; the
-`not run:` line of an abstention reads `candidates N of M, omitted K`, both parts always
-present and no window count.
-
-Every answering model must be Jev for `fill`, including a dry run: otherwise exit 4,
-`api_unavailable`, `answered by <model>, not Jev`. Missing names are `unknown` in `meta.model`.
-
-`meta.model` is a string; several models are joined with `", "`. `meta.backend` names the API.
-`meta.requests` counts inference POST attempts, including failures and retries, excluding health
-and prewarm GETs. Missing token usage is `null`, not a measured zero. `meta.cost_usd` is zero at
-the classifier backend's default zero service price; otherwise incomplete input usage makes the
-estimate `null`. Costs are input-token estimates, not billing receipts.
-
-`meta.request_id` identifies the last TypeSafe inference response when available. It is `null`
-without a reported request ID, including all-cache answers. `health` does not record one.
-
-## Exit codes
+Branch on `exit_code`, then inspect `data`. `ok` is true for no (1) and abstention (3) as well
+as success (0). `fill` requires `--dry-run` with `--json`; a successful resolution supplies
+`data.argv`. On abstention, `data.shortlist` where present contains candidates and evidence,
+not selected handles. `fill` reports each marker's reason and its first failure in argv order.
 
 | Code | Meaning |
 |---:|:---|
-| 0 | yes, found, successful operation |
-| 1 | `is`: one no; `filter`: kept none |
-| 2 | bad flag, argument or configuration |
-| 3 | nothing fits or unsure; `filter` and `label`: every record unsure |
-| 4 | backend unavailable or quota exhausted |
+| 0 | yes, found, done |
+| 1 | `is`: any no; `filter`: kept none |
+| 2 | usage error |
+| 3 | no match, near tie or unsure |
+| 4 | unavailable, exhausted quota, deadline or protocol error |
 | 5 | missing or rejected TypeSafe key |
-| 6 | empty, too large or unreadable input |
-| 7 | reserved |
-| 130 | declined at `add` confirmation |
+| 6 | empty, oversized, unreadable or invalid input |
+| 130 | declined at interactive `add` confirmation |
 
-Write the condition so that yes means act. `&&` stops on every nonzero code; use explicit
-branches when no, abstention and errors require different handling. Under `git bisect run`,
-map an unsure exit 3 to 125. Do not silently retry abstention until it agrees.
-`fill` exits 2–6 before execution; after execution the command owns its exit code, including
-2–6. Successful dry runs exit 0. Exit 4 splits three ways by `error.kind`: `api_unavailable`
-is a transport failure to back off from, `api_deadline` is the `JEVIFY_DEADLINE` budget passing,
-so raise it or split the input, and `api_protocol` is a response jevify could not read.
+Error kinds are stable. `quota_exhausted` means depleted credits or free budget and is never
+retried. A per-request spending limit is `input_too_large` (6); narrow the request.
+`api_deadline` (4) means the overall budget expired. Do not retry abstention until it agrees.
+`health` performs a small uncached classification, including quota/credit checks through errors.
 
-Set `JEVIFY_STATUS_FILE=PATH` to tell an abstention from the command's own exit code without
-reading stderr. `fill` writes `{command, version, exit_code, ran, argv, reason, markers, error}`
-to PATH before it starts anything. `ran` true means the command started and the observed exit
-code is the command's; `ran` false, or no file, means nothing ran and the code is jevify's. A
-successful dry run is `exit_code` 0 with `ran` false. An unwritable path is exit 6
-`status_file_unwritable`, and nothing runs. The command inherits the variable; unset it in a
-wrapper when the command itself runs `jevify fill`.
+## Permissions
 
-## Data per verb
+Allow `fill --dry-run` and authorize `fill` by the underlying command prefix. Quote whole
+marker arguments; never `eval` a preview. Stdin has one role, candidates or context; use
+`--candidates FILE` or `--context FILE` for the other. A failed marker runs nothing. An unsure
+flag cannot silently disappear. A lister failure, overflow or deadline never yields a partial
+list. User recipes require explicit `JEVIFY_CONFIG_DIR`, never the cwd or platform config dir.
 
-| Verb | Fields |
-|:---|:---|
-| `fill --dry-run` | `argv` on success, `reason`, `markers[{arg,kind,reason,handle,p,candidates,total,omitted}]` |
-| `pick --from` | `matches[{text,ordinal,p,lossy}]`, `reason`, `any`, `source`, `candidates`, `total`, `omitted`, `windows`, `finalists_per_window` |
-| `pick` | `matches[{line,text,ordinal,p,lossy?}]`, `any`, `source` |
-| `why` | `causes[{line,text,p,context[]}]`, `any`, `considered`, `total`, `hint`, `saved_input`, `complete` |
-| `filter` | `records[{text,ordinal,p,verdict,lossy?,unreadable?}]`, `kept`, `total`, `unsure`, `saved_input`, `complete`, `excerpts_withheld` |
-| `label` | `records[{label,text,ordinal,p,lossy?,unreadable?}]`, `labelled`, `total`, `unsure`, `complete`, `excerpts_withheld` |
-| `is`, one statement | `p`, `verdict`, `truncated`, `reason` when oversized |
-| `is`, several statements | `statements[{statement,verdict,p}]`, aggregate `verdict`, `truncated`, `reason` when oversized |
-| `route` | `tool`, `summary`, `synopsis`, `fit`, `ties[{tool,fit}]`, `alternatives[]` |
-| `add` | `hunks[{file,header,p,staged}]` |
-| `sort` | `moves[{from,to,p}]`, `skipped[{file,reason}]`, `undo_log`, `applied` |
-| `capabilities` | commands, flags, exit codes, environment, limits, backends and safety contract |
-| `robot-docs` | `topic`, `text` |
-| `health` | `backend`, `base_url`, `key`, `api`, `latency_ms`, `models` |
-| `init` | `script` |
+After execution the child owns the exit code. `JEVIFY_STATUS_FILE=PATH` records `ran`, argv,
+reasons and errors before the handoff. A dry run has `ran: false`. An unwritable status file
+prevents execution; exec failure after the write is `cannot_run` (6).
 
-Ordinals are 1-based. Non-UTF-8 records carry replacement text with `lossy: true` and `ordinal`;
-use human output when exact original bytes matter. `pick` and `filter` preserve those bytes;
-`label` prints `LABEL<TAB>RECORD` with the record unchanged after the tab, `?` when unsure.
+Output verbs start no user command. `add` only stages selected tracked hunks; use `--yes` when
+staging is authorized. A noninteractive call without it or `--dry-run` exits 2. Human decline
+is 130. A high score grants no permission.
 
-## One process for many records
+## Evidence and privacy
 
-```sh
-fd -0 -e txt | jevify filter -0 --files 'asks for a refund'
-gh issue list | jevify label bug,feature,question | cut -f1 | sort | uniq -c
-gh run view --log-failed | jevify why --json
-git log --oneline | jevify pick --json 'the commit that renamed the project'
-jevify route --json 'keep my mac awake for an hour'
+Check `why.considered` against `why.total`. `is` abstains on oversized context; `add` rejects
+oversized hunks. `--files` uses excerpts, not complete file review. `pick` and `filter`
+preserve record bytes and order; machine text can be lossy for non-UTF-8 input.
+
+Only `why` and `filter` save raw input locally, including secrets, for seven days. Set
+`JEVIFY_NO_SAVE=1` or pass `--no-save` to stop it; `--no-cache` controls answer caching
+independently. Requests use best-effort redaction. [Privacy](../../PRIVACY.md) lists evidence
+and retention; semantic judgments are not security gates.
+
+## Failure integrations
+
+The [Claude Code plugin](../../plugins/jevify/skills/jevify/SKILL.md) includes a Bash
+`PostToolUseFailure` hook that supplies a `why` answer for long failures. Its input can be
+truncated by Claude Code; pipe the full output when the missing middle matters.
+The [GitHub Action](../../action.yml) writes the cause to the job summary:
+
+```yaml
+- uses: tpellet/jevify@<tag>
+  if: failure()
+  with:
+    log: build.log
 ```
 
-`filter` and `label` send up to 60 records per request on classifier.dev, each judged alone.
-On TypeSafe, 20 records share a request and each question names its record; independence is
-not claimed. `pick`, `filter` and `label` cap distinct records at 20,000. `label` takes at most
-99 labels on classifier.dev and 200 on TypeSafe. `--files` reads paths from stdin and
-withholds hidden and secret-looking excerpts; it does not promise whole-file review.
-
-Only `why` and `filter` save raw input, including secrets. The saved path appears on stderr and
-in `data.saved_input`; a failed or skipped save sets `complete=false`. `--no-save` disables
-saving for one call and `JEVIFY_NO_SAVE=1` for every call in an environment; `--no-cache` and
-`JEVIFY_NO_CACHE` do not, they govern the answer cache alone. A saved input keeps for seven
-days, the answer cache's retention; a later save deletes the store's own files past that age
-and nothing else. [Privacy](../../PRIVACY.md) names its location.
-
-## Permissions and evidence
-
-Allow `jevify fill --dry-run` freely; authorize `fill` per command prefix, for example
-`jevify fill -- git switch:*`, exactly as the command itself is allowed. jevify is not a
-permission system. Quote whole marker arguments, as in
-`jevify fill --dry-run -- git switch '@{branch:the auth refactor}'`; inspect previews, never
-`eval`. Do not pass markers through a second shell or use unchecked `pick` substitutions.
-
-Output verbs start no user command. `route` prints a tool and synopsis; the caller writes and
-authorizes its own command. `add` stages only with `--yes` in machine mode; otherwise it exits
-130. `sort` proposes moves unless `--apply` or `--undo` is supplied. Authorization belongs to
-the caller, and a high score does not supply it.
-
-Compare `why.considered` with `why.total`; a cause selected from partial evidence is not a
-whole-log guarantee. `is` abstains on oversized context before calling the backend. `add`
-rejects oversized hunks before staging. `p` requires task- and backend-specific calibration;
-the [measurements](how-it-works.md#numbers) do not transfer to every verb.
-
-A `rate_limit_day` HTTP 429 returns exit 4, `daily quota of the free backend reached`, without
-retry. Other transient failures may be retried. Never use semantic judgments as security gates
-for untrusted text. Outbound redaction is best effort; local saved inputs remain raw.
+Choose a release tag containing the action. Save the earlier failing step with
+`2>&1 | tee build.log` and `shell: bash` so the pipeline preserves failure.

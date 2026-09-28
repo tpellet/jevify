@@ -49,8 +49,7 @@
 //! Without a key the TypeSafe half prints `SKIPPED` and returns; with no network, or a backend
 //! that answers with a model other than Jev, each case prints `SKIPPED` and the run reports
 //! nothing about the pages. A hand-off lists a skipped backend as NOT RUN, never as passed.
-//! One full run costs about 31 classifications keyless, 14 of them the `why` demo, and 22 on
-//! TypeSafe, whose wider window needs fewer of them.
+//! Backend usage depends on the retained examples and request shapes.
 
 use serde_json::Value;
 
@@ -108,7 +107,7 @@ fn transcripts() -> Vec<Transcript> {
             stdin: Stdin::File("docs/demo/build.log"),
             expect: Expect::Chose(&["error[E0425]: cannot find value `conifg` in this scope"]),
             on_page: &[],
-            cites: &[Cite(README, 26), Cite(GETTING_STARTED, 48)],
+            cites: &[Cite(README, 37), Cite(GETTING_STARTED, 49)],
         },
         Transcript {
             shown: "git log --oneline v0.8.3..v0.9.3 | jevify fill --field 1 --dry-run -- git show --stat --format=%s '@{-:made route abstain when two commands are too close}'",
@@ -127,7 +126,7 @@ fn transcripts() -> Vec<Transcript> {
             stdin: Stdin::Listing(RELEASE_LOG),
             expect: Expect::Chose(&["317cbf7"]),
             on_page: &[],
-            cites: &[Cite(README, 49), Cite(GETTING_STARTED, 135)],
+            cites: &[Cite(GETTING_STARTED, 136)],
         },
         // README's promise under the nothing-fits demo: "when no commit fits your description,
         // no command runs". Over the same release listing, which holds no such commit.
@@ -148,32 +147,6 @@ fn transcripts() -> Vec<Transcript> {
             on_page: &[],
             cites: &[],
         },
-        Transcript {
-            shown: "printf 'retry_backoff\\nparse_header\\n' | jevify fill --dry-run -- cargo test '@{-:the test that retries a failed request}'",
-            argv: &[
-                "fill",
-                "--dry-run",
-                "--",
-                "cargo",
-                "test",
-                "@{-:the test that retries a failed request}",
-            ],
-            stdin: Stdin::Text("retry_backoff\nparse_header\n"),
-            expect: Expect::Chose(&["retry_backoff"]),
-            on_page: &[],
-            cites: &[Cite(README, 68)],
-        },
-        Transcript {
-            shown: "jevify label bug,feature,question < docs/demo/issues.txt",
-            argv: &["label", "bug,feature,question"],
-            stdin: Stdin::File("docs/demo/issues.txt"),
-            expect: Expect::Chose(&[
-                "bug", "feature", "question", "bug", "feature", "question", "bug", "feature",
-                "question", "bug",
-            ]),
-            on_page: &[],
-            cites: &[Cite(README, 84)],
-        },
         // The same call through `cut | sort | uniq -c`: the counts the page prints are these
         // ten labels counted, so the labels are the expectation and the counts follow.
         Transcript {
@@ -185,7 +158,7 @@ fn transcripts() -> Vec<Transcript> {
                 "question", "bug",
             ]),
             on_page: &[],
-            cites: &[Cite(README, 98), Cite(GETTING_STARTED, 91)],
+            cites: &[Cite(GETTING_STARTED, 92)],
         },
         Transcript {
             shown: "jevify filter 'reports a crash' < docs/demo/issues.txt",
@@ -196,7 +169,7 @@ fn transcripts() -> Vec<Transcript> {
                 "#290 Panic on non-UTF-8 file names",
             ]),
             on_page: &[],
-            cites: &[Cite(README, 109), Cite(GETTING_STARTED, 61)],
+            cites: &[Cite(GETTING_STARTED, 62)],
         },
         Transcript {
             shown: "printf 'build started\\nerror: connection timed out\\nbuild stopped\\n' | jevify filter --strict 'reports a network failure'",
@@ -204,7 +177,7 @@ fn transcripts() -> Vec<Transcript> {
             stdin: Stdin::Text("build started\nerror: connection timed out\nbuild stopped\n"),
             expect: Expect::Chose(&["error: connection timed out"]),
             on_page: &[],
-            cites: &[Cite(README, 122), Cite(GETTING_STARTED, 78)],
+            cites: &[Cite(GETTING_STARTED, 79)],
         },
         Transcript {
             shown: "jevify pick 'what I paid a streaming service' < docs/demo/downloads.txt",
@@ -212,7 +185,7 @@ fn transcripts() -> Vec<Transcript> {
             stdin: Stdin::File("docs/demo/downloads.txt"),
             expect: Expect::Chose(&["spotify_receipt.pdf"]),
             on_page: &[],
-            cites: &[Cite(README, 142), Cite(GETTING_STARTED, 67)],
+            cites: &[Cite(GETTING_STARTED, 68)],
         },
         Transcript {
             shown: "jevify pick 'the tax return' < docs/demo/downloads.txt",
@@ -220,7 +193,7 @@ fn transcripts() -> Vec<Transcript> {
             stdin: Stdin::File("docs/demo/downloads.txt"),
             expect: Expect::NothingFits,
             on_page: &[],
-            cites: &[Cite(README, 146), Cite(GETTING_STARTED, 118)],
+            cites: &[Cite(GETTING_STARTED, 119)],
         },
         Transcript {
             shown: "jevify is 'asks for a refund' < docs/demo/mail.txt && echo refund",
@@ -228,23 +201,7 @@ fn transcripts() -> Vec<Transcript> {
             stdin: Stdin::File("docs/demo/mail.txt"),
             expect: Expect::Chose(&["yes"]),
             on_page: &["refund"],
-            cites: &[Cite(README, 161), Cite(GETTING_STARTED, 102)],
-        },
-        Transcript {
-            shown: "printf 'A crash with no reproduction steps.\\n' | jevify fill --dry-run -- printf '%s\\n' \\",
-            argv: &[
-                "fill",
-                "--dry-run",
-                "--",
-                "printf",
-                "%s\n",
-                "@{one:bug|feature|docs:what kind of report is this}",
-                "@{flag:--draft:the report lacks steps to reproduce}",
-            ],
-            stdin: Stdin::Text("A crash with no reproduction steps.\n"),
-            expect: Expect::Chose(&["bug", "--draft"]),
-            on_page: &[],
-            cites: &[Cite(README, 212)],
+            cites: &[Cite(GETTING_STARTED, 103)],
         },
         Transcript {
             shown: "git ls-files | jevify pick --files 'where the command-line flags are defined'",
@@ -256,7 +213,7 @@ fn transcripts() -> Vec<Transcript> {
             stdin: Stdin::Listing(&["git", "ls-files"]),
             expect: Expect::Chose(&["src/cli.rs"]),
             on_page: &[],
-            cites: &[Cite(GETTING_STARTED, 109)],
+            cites: &[Cite(GETTING_STARTED, 110)],
         },
     ]
 }
