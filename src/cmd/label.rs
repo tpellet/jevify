@@ -4,20 +4,17 @@
 //! validated by the parser (`cli::Labels`); their count against the backend's window is
 //! checked here, after `Config::load`, where the backend is known.
 //!
-//! One Choice per record, the labels plus an internal `NONE`, through the scorer of `filter`.
-//! The `?` decision is `tournament::decide` over a `Ranking` built from the record's answer
-//! with `any = 1.0`, so the threshold plays no part: `NONE` winning or tying the best label
-//! and the winner ratio do. `label` saves nothing: every record comes out.
+//! One Choice per record, the labels plus an internal `NONE`, through the record pipeline of
+//! `records`. The `?` decision is `tournament::decide` over a `Ranking` built from the
+//! record's answer with `any = 1.0`, so the threshold plays no part: `NONE` winning or tying
+//! the best label and the winner ratio do. `label` saves nothing: every record comes out.
 
 use crate::{
-    cmd::{
-        Outcome,
-        filter::{batch_size, score, write_record},
-    },
+    cmd::Outcome,
     config::Config,
     exit::{Exit, JevifyError},
-    jev::{Question, Questions, client::Client},
-    records::{self, Split},
+    jev::{Question, Questions},
+    records::{self, Split, write_record},
     tournament::{Candidate, Decision, Ranking, decide},
 };
 use std::collections::BTreeMap;
@@ -28,6 +25,7 @@ pub struct LabelFlags {
 }
 
 const UNSURE: &str = "?";
+const EXAMPLE: &str = "head -n 20000 input | jevify label bug,feature";
 
 pub async fn run(
     ctx: &Config,
@@ -43,148 +41,60 @@ pub async fn run(
             ctx.backend.as_str()
         )));
     }
-    let input = tokio::task::spawn_blocking(crate::input::read_stdin_bytes)
-        .await
-        .map_err(|e| JevifyError::Input(e.to_string()))??;
-    let mut records = records::parse(&input, flags.split)?;
-    let (unique, occurrences) = records::distinct(&input, &records);
-    if unique.len() > 20_000 {
-        return Err(JevifyError::Kinded {
-            kind: "too_many",
-            exit: Exit::Input,
-            message: "more than 20,000 distinct records; narrow with grep or head".into(),
-            hint: "narrow with grep or head",
-            example: "head -n 20000 input | jevify label bug,feature",
-        });
-    }
-    let unread = if flags.files {
-        let cwd = std::env::current_dir().map_err(|e| JevifyError::Input(e.to_string()))?;
-        records::excerpts(&mut records, &cwd).await?
-    } else {
-        records::Unread::default()
-    };
-    let withheld = unread.count;
-    if !machine && withheld > 0 {
-        eprintln!("jevify label: excerpts withheld: {withheld}");
-    }
-    unread.report("label", &records);
-    let client = Client::new(ctx)?;
-    // An unreadable file is never asked about: its name alone is not the evidence the caller
-    // asked for, and it comes out `?` with p 0.
-    let asked: Vec<usize> = (0..unique.len())
-        .filter(|&u| !unread.unreadable.contains_key(&unique[u]))
-        .collect();
-    let evidence: Vec<_> = asked
-        .iter()
-        .map(|&u| records[unique[u]].evidence.clone())
-        .collect();
+    let mut input = records::read("label", flags.split, machine, true, EXAMPLE).await?;
+    input.excerpts(flags.files).await?;
     let questions = Questions::from([("label".into(), question(&labels))]);
-    let size = batch_size(client.backend(), questions.len());
-    eprintln!(
-        "jevify label: {} records, {} distinct, {} requests",
-        records.len(),
-        unique.len(),
-        asked.len().div_ceil(size)
-    );
-    let mut answers: Vec<(String, f64)> = Vec::with_capacity(unique.len());
-    let mut asked_done = 0;
-    let mut cursor = 0;
     let mut labelled = 0;
     let mut unsure = 0;
     let mut entries = Vec::new();
-    let stdout = std::io::stdout();
-    let mut stdout = stdout.lock();
-    let mut emit = |answers: &[(String, f64)]| -> Result<bool, JevifyError> {
-        while cursor < records.len() && occurrences[cursor] < answers.len() {
-            let (label, p) = &answers[occurrences[cursor]];
-            if label == UNSURE {
-                unsure += 1;
-            } else {
-                labelled += 1;
-            }
-            if machine {
-                let mut entry = records::envelope(&input, &records[cursor], cursor + 1);
-                entry["label"] = label.as_str().into();
-                entry["p"] = (*p).into();
-                if let Some(reason) = unread.unreadable.get(&cursor) {
-                    entry["unreadable"] = reason.as_str().into();
+    let mut stdout = std::io::stdout().lock();
+    let completed = input
+        .judge(
+            ctx,
+            &questions,
+            (UNSURE.to_string(), 0.0),
+            |response| {
+                let (label, p, gate) = verdict(&labels, response.probs("label")?, ctx.threshold);
+                ctx.stats.gate(gate);
+                Ok((label, p))
+            },
+            |index, (label, p)| {
+                if label == UNSURE {
+                    unsure += 1;
+                } else {
+                    labelled += 1;
                 }
-                entries.push(entry);
-            } else {
-                let mut line = Vec::with_capacity(label.len() + 1 + records[cursor].raw.len());
+                if machine {
+                    entries.push(input.entry(index, |entry| {
+                        entry["label"] = label.as_str().into();
+                        entry["p"] = (*p).into();
+                    }));
+                    return Ok(true);
+                }
+                let raw = input.raw(index);
+                let mut line = Vec::with_capacity(label.len() + 1 + raw.len());
                 line.extend_from_slice(label.as_bytes());
                 line.push(b'\t');
-                line.extend_from_slice(&input[records[cursor].raw.clone()]);
-                if !write_record(&mut stdout, &line)? {
-                    return Ok(false);
-                }
-            }
-            cursor += 1;
-        }
-        Ok(true)
-    };
-    let result = score(&client, &evidence, &questions, |batch| {
-        for response in batch {
-            let (label, p, gate) = verdict(&labels, response.probs("label")?, ctx.threshold);
-            ctx.stats.gate(gate);
-            answers.resize(asked[asked_done], (UNSURE.into(), 0.0));
-            answers.push((label, p));
-            asked_done += 1;
-        }
-        emit(&answers)
-    })
-    .await;
-    let result = match result {
-        Ok(true) => {
-            answers.resize(unique.len(), (UNSURE.into(), 0.0));
-            emit(&answers)
-        }
-        other => other,
-    };
-    let completed = match result {
-        Ok(completed) => completed,
-        Err(error) => {
-            let answered = format!("answered {} of {}", answers.len(), unique.len());
-            if machine {
-                return Err(JevifyError::Kinded {
-                    kind: error.kind(),
-                    exit: error.exit(),
-                    message: format!("{error}; {answered}"),
-                    hint: error.hint(),
-                    example: error.example(),
-                });
-            }
-            eprintln!("jevify label: {answered}");
-            return Err(error);
-        }
-    };
-    let exit = if completed && !records.is_empty() && unsure == records.len() {
+                line.extend_from_slice(raw);
+                write_record(&mut stdout, &line)
+            },
+        )
+        .await?;
+    let total = input.records.len();
+    let exit = if completed && total > 0 && unsure == total {
         Exit::Abstain
     } else {
         Exit::Ok
     };
-    let mut status = format!(
-        "jevify label: labelled {labelled} of {}, {unsure} unsure",
-        records.len()
+    input.status(
+        ctx,
+        &format!("labelled {labelled} of {total}, {unsure} unsure"),
     );
-    if withheld > 0 {
-        status.push_str(&format!(", excerpts withheld: {withheld}"));
-    }
-    if let Some(model) = ctx.stats.model.lock().unwrap().as_ref() {
-        let others: Vec<_> = model
-            .split(", ")
-            .filter(|m| !m.starts_with("jev"))
-            .collect();
-        if !others.is_empty() {
-            status.push_str(&format!(", answered by {}, not Jev", others.join(", ")));
-        }
-    }
-    eprintln!("{}", status.replace(['\r', '\n'], " "));
     Ok(Outcome {
         exit,
         data: serde_json::json!({
-            "records": entries, "labelled": labelled, "total": records.len(), "unsure": unsure,
-            "complete": completed, "excerpts_withheld": withheld
+            "records": entries, "labelled": labelled, "total": total, "unsure": unsure,
+            "complete": completed, "excerpts_withheld": input.unread.count
         }),
         human: Vec::new(),
         exec: None,
@@ -239,78 +149,5 @@ fn verdict(
     match decide(&ranking, threshold) {
         Decision::Found(winner) => (labels[winner.index].clone(), winner.p, gate),
         Decision::NoMatch | Decision::Ambiguous(_) => (UNSURE.into(), best, gate),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn probs(pairs: &[(&str, f64)]) -> BTreeMap<String, f64> {
-        pairs.iter().map(|(k, p)| (k.to_string(), *p)).collect()
-    }
-
-    #[test]
-    fn verdict_needs_a_clear_winner_over_the_runner_up_and_none() {
-        let labels = ["bug".to_string(), "feature".to_string()];
-        for (answer, threshold, expected) in [
-            (
-                probs(&[("bug", 0.8), ("feature", 0.1), ("NONE", 0.1)]),
-                0.5,
-                ("bug", 0.8),
-            ),
-            (
-                probs(&[("bug", 0.8), ("feature", 0.1), ("NONE", 0.1)]),
-                0.99,
-                ("bug", 0.8),
-            ),
-            (
-                probs(&[("bug", 0.45), ("feature", 0.45), ("NONE", 0.1)]),
-                0.5,
-                ("?", 0.45),
-            ),
-            (
-                probs(&[("bug", 0.5), ("feature", 0.4), ("NONE", 0.1)]),
-                0.5,
-                ("?", 0.5),
-            ),
-            (
-                probs(&[("bug", 0.2), ("feature", 0.1), ("NONE", 0.7)]),
-                0.5,
-                ("?", 0.2),
-            ),
-            (
-                probs(&[("bug", 0.4), ("feature", 0.2), ("NONE", 0.4)]),
-                0.5,
-                ("?", 0.4),
-            ),
-            (probs(&[("NONE", 1.0)]), 0.5, ("?", 0.0)),
-        ] {
-            let (label, p, gate) = verdict(&labels, &answer, threshold);
-            assert_eq!((label.as_str(), p), expected, "{answer:?}");
-            assert_eq!(gate.any, None, "label judges no Noul");
-            assert_eq!(gate.none, answer.get("NONE").copied(), "{answer:?}");
-        }
-        assert_eq!(verdict(&[], &probs(&[("NONE", 0.0)]), 0.5).0, "?");
-    }
-
-    #[test]
-    fn question_lists_every_label_and_none() {
-        let labels = ["bug".to_string(), "feature".to_string()];
-        let asked = serde_json::to_value(question(&labels)).unwrap();
-        assert_eq!(asked["type"], "choice");
-        assert!(
-            asked["instructions"]
-                .as_str()
-                .unwrap()
-                .contains("bug, feature")
-        );
-        let criteria = asked["criteria"].as_object().unwrap();
-        assert_eq!(
-            criteria.keys().collect::<Vec<_>>(),
-            ["NONE", "bug", "feature"]
-        );
-        assert!(criteria["NONE"].is_string());
-        assert!(criteria["bug"].is_null());
     }
 }

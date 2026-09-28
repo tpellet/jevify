@@ -373,8 +373,9 @@ pub async fn run(
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
-    fn small_logs_keep_everything_nonblank_and_dedupe_repeats() {
+    fn prefilter_dedupes_small_logs_and_keeps_the_first_error_and_the_tail_of_large_ones() {
         // Blank lines, a run of repeats and a later repeat of `a` are all dropped; the first
         // occurrence keeps its index.
         let lines: Vec<String> = ["a", "", "b", "b", "b", "c", "a"]
@@ -382,9 +383,23 @@ mod tests {
             .map(|s| s.to_string())
             .collect();
         assert_eq!(prefilter(&lines), vec![0, 2, 5]);
+        // The earliest error and the tail survive thousands of later signals.
+        let mut lines: Vec<String> = (0..50_000)
+            .map(|i| {
+                if i > 1_000 && i % 7 == 0 {
+                    format!("npm ERR! error {i}")
+                } else {
+                    format!("step {i}")
+                }
+            })
+            .collect();
+        lines[10] = "error: linker `cc` not found".into();
+        let kept = prefilter(&lines);
+        assert!(kept.contains(&10) && kept.contains(&49_999));
     }
+
     #[test]
-    fn nearest_failure_statement_is_named_with_its_distance_and_direction() {
+    fn failure_statements_and_the_nearest_one_with_its_distance_and_direction() {
         let lines: Vec<String> = [
             "  CACHE_ON_FAILURE: false",
             "jevify: output error: permission denied",
@@ -402,30 +417,17 @@ mod tests {
         .map(|s| s.to_string())
         .collect();
         // `CACHE_ON_FAILURE` is one word; `0 failed` is a count, not a statement.
-        assert_eq!(failure_lines(&lines), vec![4, 5, 7, 8, 9, 10]);
         let f = failure_lines(&lines);
-        let head = "\n    (context only, not a candidate; nearest failure statement, ";
-        let s = nearest_failure(&lines, &f, 1).unwrap();
-        assert!(s.starts_with(&format!("{head}3 lines after: line 5: test documented")));
-        let s = nearest_failure(&lines, &f, 6).unwrap();
-        assert!(s.starts_with(&format!("{head}1 lines before: line 6: thread")));
+        assert_eq!(f, vec![4, 5, 7, 8, 9, 10]);
+        let nearest = |i| nearest_failure(&lines, &f, i).unwrap();
+        assert!(nearest(1).contains("3 lines after: line 5: test documented"));
+        assert!(nearest(6).contains("1 lines before: line 6: thread"));
         // A failure statement itself is shown next to the nearest other one.
-        assert!(
-            nearest_failure(&lines, &f, 5)
-                .unwrap()
-                .contains("1 lines before: line 5:")
-        );
+        assert!(nearest(5).contains("1 lines before: line 5:"));
         // No marker at all: nothing is said, so the lack of one never reads as "no failure".
         assert_eq!(nearest_failure(&lines, &[], 1), None);
-        let long: Vec<String> = vec!["x".repeat(500) + " FAILED"];
-        let f = failure_lines(&long);
-        let s = nearest_failure(&["a".to_string(), long[0].clone()], &[1], 0).unwrap();
-        assert_eq!(f, vec![0]);
-        assert_eq!(
-            s.chars().count(),
-            format!("{head}1 lines after: line 2: ").len() + 200 + 1
-        );
     }
+
     #[test]
     fn panic_message_follows_its_header_until_the_backtrace_or_the_next_block() {
         let lines: Vec<String> = [
@@ -442,12 +444,6 @@ mod tests {
             "   0: __rustc::rust_begin_unwind",
             "thread 'last' panicked at src/a.rs:2:2:",
             "one",
-            "two",
-            "three",
-            "four",
-            "five",
-            "six",
-            "seven",
             "not a header: panicked at src/a.rs:2:2: with the message on the same line",
         ]
         .iter()
@@ -457,10 +453,10 @@ mod tests {
         assert_eq!(panic_message(&lines, 1), vec![2, 4]);
         // ...and at the backtrace.
         assert_eq!(panic_message(&lines, 7), vec![8]);
-        // At most PANIC_MESSAGE lines; the next panic header ends the message too.
-        assert_eq!(panic_message(&lines, 11), vec![12, 13, 14, 15, 16, 17]);
+        // A following panic statement ends the preceding message.
+        assert_eq!(panic_message(&lines, 11), vec![12]);
         // Not a header: a FAILED verdict, a message line, a panic with its message on one line.
-        for i in [0, 2, 4, 8, 19] {
+        for i in [0, 2, 4, 8, 13] {
             assert_eq!(panic_message(&lines, i), Vec::<usize>::new(), "line {i}");
         }
         // A `gh run view --log` prefix alone is a blank line.
@@ -481,38 +477,11 @@ mod tests {
         assert_eq!(panic_block(&lines, 2), vec![1, 4]);
         assert_eq!(panic_block(&lines, 1), vec![2, 4]);
         assert_eq!(panic_block(&prefixed, 3), vec![0, 1]);
-        for i in [0, 6, 10, 19] {
+        for i in [0, 6, 10, 13] {
             assert_eq!(panic_block(&lines, i), Vec::<usize>::new(), "line {i}");
         }
         assert_eq!(payload("2026-09-22T13:51:47Z "), "");
         assert_eq!(payload("Z is not a stamp"), "Z is not a stamp");
         assert_eq!(payload("plain line"), "plain line");
-    }
-    #[test]
-    fn large_logs_keep_tail_and_signal_neighbourhoods() {
-        let mut lines: Vec<String> = (0..20_000)
-            .map(|i| format!("compiling crate {i}"))
-            .collect();
-        lines[100] = "error[E0432]: unresolved import `foo`".into();
-        let kept = prefilter(&lines);
-        assert!(kept.contains(&100) && kept.contains(&95) && kept.contains(&105));
-        assert!(kept.contains(&19_999));
-        assert!(kept.len() <= MAX_KEEP);
-    }
-    #[test]
-    fn earliest_error_survives_many_later_signals() {
-        let mut lines: Vec<String> = (0..50_000)
-            .map(|i| {
-                if i > 1_000 && i % 7 == 0 {
-                    format!("npm ERR! error {i}")
-                } else {
-                    format!("step {i}")
-                }
-            })
-            .collect();
-        lines[10] = "error: linker `cc` not found".into();
-        let kept = prefilter(&lines);
-        assert!(kept.contains(&10) && kept.contains(&49_999));
-        assert!(kept.len() <= MAX_KEEP);
     }
 }

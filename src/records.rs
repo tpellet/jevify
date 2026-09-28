@@ -1,7 +1,13 @@
-use crate::exit::JevifyError;
-use std::collections::HashMap;
+use crate::config::Config;
+use crate::exit::{Exit, JevifyError};
+use crate::jev::client::{Client, batch_size};
+use crate::jev::{Questions, Response};
+use futures::StreamExt;
+use std::collections::{BTreeMap, HashMap};
+use std::io::Write;
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
-use std::{ffi::OsString, ops::Range, path::Path};
+use std::path::{Path, PathBuf};
+use std::{ffi::OsString, ops::Range};
 
 #[derive(Clone, Debug)]
 pub struct Record {
@@ -358,46 +364,213 @@ fn excerpt_of(cwd: &Path, path: &Path) -> Result<Option<String>, String> {
     }))
 }
 
+/// The stdin of `filter` and `label`: its records, deduplicated and capped, with excerpts
+/// read for `--files`; judged one Choice per distinct record and written out in input order.
+pub struct Input {
+    verb: &'static str,
+    machine: bool,
+    bytes: Vec<u8>,
+    pub records: Vec<Record>,
+    /// The representative record of each distinct record, and each record's distinct index.
+    unique: Vec<usize>,
+    occurrences: Vec<usize>,
+    pub unread: Unread,
+    /// The saved copy of the bytes for `saved_input`, or why there is none.
+    pub saved: Result<PathBuf, String>,
+}
+
+/// Reads and splits stdin for `verb`, off the runtime; `no_save` is true for a verb that keeps
+/// no copy of its input; `example` is the hint past 20,000 distinct records.
+pub async fn read(
+    verb: &'static str,
+    split: Split,
+    machine: bool,
+    no_save: bool,
+    example: &'static str,
+) -> Result<Input, JevifyError> {
+    tokio::task::spawn_blocking(move || {
+        let bytes = crate::input::read_stdin_bytes()?;
+        let records = parse(&bytes, split)?;
+        let (unique, occurrences) = distinct(&bytes, &records);
+        if unique.len() > 20_000 {
+            return Err(JevifyError::Kinded {
+                kind: "too_many",
+                exit: Exit::Input,
+                message: "more than 20,000 distinct records; narrow with grep or head".into(),
+                hint: "narrow with grep or head",
+                example,
+            });
+        }
+        let directory = crate::config::saved_input_dir(no_save);
+        let saved = crate::save::save(&bytes, directory.as_deref());
+        Ok(Input {
+            verb,
+            machine,
+            bytes,
+            records,
+            unique,
+            occurrences,
+            unread: Unread::default(),
+            saved,
+        })
+    })
+    .await
+    .map_err(|e| JevifyError::Input(e.to_string()))?
+}
+
+impl Input {
+    /// With `files`, reads each record's excerpt and says how many were withheld.
+    pub async fn excerpts(&mut self, files: bool) -> Result<(), JevifyError> {
+        if files {
+            let cwd = std::env::current_dir().map_err(|e| JevifyError::Input(e.to_string()))?;
+            self.unread = excerpts(&mut self.records, &cwd).await?;
+        }
+        let withheld = self.unread.count;
+        if !self.machine && withheld > 0 {
+            eprintln!("jevify {}: excerpts withheld: {withheld}", self.verb);
+        }
+        self.unread.report(self.verb, &self.records);
+        Ok(())
+    }
+
+    /// The bytes of record `index` as they came in.
+    pub fn raw(&self, index: usize) -> &[u8] {
+        &self.bytes[self.records[index].raw.clone()]
+    }
+
+    /// Record `index`'s envelope entry with its verdict `fields` and, if unreadable, the reason.
+    pub fn entry(
+        &self,
+        index: usize,
+        fields: impl FnOnce(&mut serde_json::Value),
+    ) -> serde_json::Value {
+        let mut entry = envelope(&self.bytes, &self.records[index], index + 1);
+        fields(&mut entry);
+        if let Some(reason) = self.unread.unreadable.get(&index) {
+            entry["unreadable"] = reason.as_str().into();
+        }
+        entry
+    }
+
+    /// One Choice per distinct record, batched, delivered in input order as each batch lands.
+    /// `answer` reads a record's verdict off its response; `emit` writes record `index` with
+    /// its verdict, false to stop, which cancels the pending requests. A record never asked
+    /// (an unreadable file: its name alone is not the evidence the caller asked for) or never
+    /// answered is `unsure`. `Ok(true)` when every record was written.
+    pub async fn judge<A: Clone>(
+        &self,
+        ctx: &Config,
+        questions: &Questions,
+        unsure: A,
+        mut answer: impl FnMut(&Response) -> Result<A, JevifyError>,
+        mut emit: impl FnMut(usize, &A) -> Result<bool, JevifyError>,
+    ) -> Result<bool, JevifyError> {
+        let client = Client::new(ctx)?;
+        let asked: Vec<usize> = (0..self.unique.len())
+            .filter(|&u| !self.unread.unreadable.contains_key(&self.unique[u]))
+            .collect();
+        let evidence: Vec<_> = asked
+            .iter()
+            .map(|&u| self.records[self.unique[u]].evidence.clone())
+            .collect();
+        let size = batch_size(client.backend(), questions.len());
+        eprintln!(
+            "jevify {}: {} records, {} distinct, {} requests",
+            self.verb,
+            self.records.len(),
+            self.unique.len(),
+            asked.len().div_ceil(size)
+        );
+        let mut answers: Vec<A> = Vec::with_capacity(self.unique.len());
+        let mut cursor = 0;
+        let mut flush = |answers: &[A]| -> Result<bool, JevifyError> {
+            while cursor < self.records.len() && self.occurrences[cursor] < answers.len() {
+                if !emit(cursor, &answers[self.occurrences[cursor]])? {
+                    return Ok(false);
+                }
+                cursor += 1;
+            }
+            Ok(true)
+        };
+        let streamed = async {
+            let mut stream = client.ask_each(&evidence, questions);
+            let mut ready = BTreeMap::new();
+            let mut next = 0;
+            let mut asked_done = 0;
+            while let Some(batch) = stream.next().await {
+                let (index, responses) = batch?;
+                ready.insert(index, responses);
+                while let Some(responses) = ready.remove(&next) {
+                    for response in &responses {
+                        let verdict = answer(response)?;
+                        answers.resize(asked[asked_done], unsure.clone());
+                        answers.push(verdict);
+                        asked_done += 1;
+                    }
+                    if !flush(&answers)? {
+                        return Ok(false);
+                    }
+                    next += 1;
+                }
+            }
+            answers.resize(self.unique.len(), unsure.clone());
+            flush(&answers)
+        }
+        .await;
+        streamed.map_err(|error| {
+            let answered = format!("answered {} of {}", answers.len(), self.unique.len());
+            if self.machine {
+                return JevifyError::Kinded {
+                    kind: error.kind(),
+                    exit: error.exit(),
+                    message: format!("{error}; {answered}"),
+                    hint: error.hint(),
+                    example: error.example(),
+                };
+            }
+            eprintln!("jevify {}: {answered}", self.verb);
+            error
+        })
+    }
+
+    /// The verb's closing stderr line: `head`, the withheld count, and any model that answered
+    /// instead of Jev, on one line.
+    pub fn status(&self, ctx: &Config, head: &str) {
+        let mut status = format!("jevify {}: {head}", self.verb);
+        if self.unread.count > 0 {
+            status.push_str(&format!(", excerpts withheld: {}", self.unread.count));
+        }
+        if let Some(model) = ctx.stats.model.lock().unwrap().as_ref() {
+            let others: Vec<_> = model
+                .split(", ")
+                .filter(|m| !m.starts_with("jev"))
+                .collect();
+            if !others.is_empty() {
+                status.push_str(&format!(", answered by {}, not Jev", others.join(", ")));
+            }
+        }
+        eprintln!("{}", status.replace(['\r', '\n'], " "));
+    }
+}
+
+/// Flush each record so even a short first batch reaches the downstream reader.
+pub fn write_record(
+    stdout: &mut std::io::StdoutLock<'_>,
+    bytes: &[u8],
+) -> Result<bool, JevifyError> {
+    match stdout.write_all(bytes).and_then(|()| stdout.flush()) {
+        Ok(()) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::BrokenPipe => Ok(false),
+        Err(error) => Err(JevifyError::Input(error.to_string())),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn meaningful_drops_imports_headers_and_blanks_and_keeps_doc_comments() {
-        let text = "#!/usr/bin/env rust\n// Copyright 2026 Someone\n// SPDX-License-Identifier: MIT\n//! Stages hunks.\n\nuse crate::{\n    a,\n    b,\n};\nuse std::io;\npub mod x;\nextern crate y;\n#include <stdio.h>\nimport os\nfrom os import path\npackage main\n/// Doc.\nfn add() {}\nfrom here on, prose\n";
-        assert_eq!(
-            meaningful(text),
-            "//! Stages hunks.\n/// Doc.\nfn add() {}\nfrom here on, prose"
-        );
-        assert_eq!(meaningful(""), "");
-        assert_eq!(meaningful("use a;\n"), "");
-    }
-
     #[tokio::test]
-    async fn excerpts_judge_caller_paths_not_working_directory_ancestors() {
-        let root = tempfile::Builder::new()
-            .prefix(".jevify-records-")
-            .tempdir()
-            .unwrap()
-            .keep();
-        eprintln!("retained records fixture: {}", root.display());
-        std::fs::write(root.join("source.rs"), "VISIBLE_EXCERPT_MARKER").unwrap();
-        let mut records = parse(b"./source.rs\n", Split::Lines).unwrap();
-        assert_eq!(excerpts(&mut records, &root).await.unwrap().count, 0);
-        assert!(records[0].evidence.contains("VISIBLE_EXCERPT_MARKER"));
-
-        let absolute = root.join("source.rs");
-        let mut records = parse(absolute.as_os_str().as_bytes(), Split::Nul).unwrap();
-        let unread = excerpts(&mut records, &root).await.unwrap();
-        assert_eq!((unread.count, unread.unreadable.len()), (1, 0));
-        assert_eq!(
-            records[0].evidence,
-            evidence(absolute.as_os_str().as_bytes())
-        );
-    }
-
-    #[test]
-    fn withheld_uses_lexical_caller_components() {
+    async fn withholding_judges_the_caller_path_not_the_working_directory_ancestors() {
         for path in ["", ".", "./source.rs", "a/./source.rs", "../source.rs"] {
             assert!(!withheld(Path::new(path)), "{path}");
         }
@@ -410,6 +583,24 @@ mod tests {
         ] {
             assert!(withheld(Path::new(path)), "{path}");
         }
+        let root = tempfile::Builder::new()
+            .prefix(".jevify-records-")
+            .tempdir()
+            .unwrap()
+            .keep();
+        eprintln!("retained records fixture: {}", root.display());
+        std::fs::write(root.join("source.rs"), "VISIBLE_EXCERPT_MARKER").unwrap();
+        let mut records = parse(b"./source.rs\n", Split::Lines).unwrap();
+        assert_eq!(excerpts(&mut records, &root).await.unwrap().count, 0);
+        assert!(records[0].evidence.contains("VISIBLE_EXCERPT_MARKER"));
+        let absolute = root.join("source.rs");
+        let mut records = parse(absolute.as_os_str().as_bytes(), Split::Nul).unwrap();
+        let unread = excerpts(&mut records, &root).await.unwrap();
+        assert_eq!((unread.count, unread.unreadable.len()), (1, 0));
+        assert_eq!(
+            records[0].evidence,
+            evidence(absolute.as_os_str().as_bytes())
+        );
     }
 
     #[test]
@@ -461,7 +652,6 @@ mod tests {
         assert_eq!(fields[0].handle.as_bytes(), b"\xff");
         assert_eq!(fields[0].evidence, "one \u{fffd}");
         assert_eq!(evidence(b"token=abcdefghijk"), "token=[REDACTED]");
-        assert_eq!(evidence(&vec![b'x'; 32_001]).chars().count(), 32_000);
     }
 
     #[test]

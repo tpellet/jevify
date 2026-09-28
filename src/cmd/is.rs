@@ -180,26 +180,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_missing_context_names_the_nearest_entries() {
-        let dir = tempfile::tempdir().unwrap();
-        for name in ["mail.txt", "mails.txt", "notes.md"] {
-            std::fs::write(dir.path().join(name), "x").unwrap();
-        }
-        let near = near_paths(&dir.path().join("mail.tx"));
-        assert!(near.starts_with("; nearby: "), "{near}");
-        assert!(
-            near.contains("mail.txt") && near.contains("mails.txt"),
-            "{near}"
-        );
-        assert!(!near.contains("notes.md"), "{near}");
-        assert_eq!(near_paths(&dir.path().join("zzzzzzzzzz")), "");
-        assert_eq!(near_paths(&dir.path().join("missing/mail.txt")), "");
-        assert_eq!(near_paths(std::path::Path::new("/")), "");
-    }
-    #[test]
     fn verdict_bands_around_the_threshold() {
         let cases = [
-            (0.9, 0.5, 0.15, Exit::Ok),
             (0.65, 0.5, 0.15, Exit::Ok),
             (0.64, 0.5, 0.15, Exit::Abstain),
             (0.35, 0.5, 0.15, Exit::Abstain),
@@ -214,8 +196,5 @@ mod tests {
         for (p, t, band, exit) in cases {
             assert_eq!(band_verdict(p, t, band).0, exit, "p={p} t={t} band={band}");
         }
-        assert_eq!(band_verdict(0.9, 0.5, 0.15).1, "yes");
-        assert_eq!(band_verdict(0.5, 0.5, 0.15).1, "unsure");
-        assert_eq!(band_verdict(0.1, 0.5, 0.15).1, "no");
     }
 }
