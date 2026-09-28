@@ -78,6 +78,12 @@ PROFILE = """(version 1)
 (allow file-write* (subpath "{scratch}"))
 (allow file-write* (subpath "{tmpdir}"))
 (allow file-write* (subpath "/dev"))
+; the CLI's Bash tool records its working directory in /tmp/claude-XXXX-cwd after
+; every command, whatever TMPDIR says; denied, every command reports exit 1
+(allow file-write* (regex #"^/private/tmp/claude-[0-9a-f]+-cwd$"))
+; zsh writes every here-document to $TMPPREFIX, /tmp/zsh by default; denied,
+; `cat <<'EOF' | tool` pipes nothing and the tool is blamed for empty input
+(allow file-write* (regex #"^/private/tmp/zsh[A-Za-z0-9]*$"))
 
 ; ---- reads: not the harness, not the gold, not the study tree, not the keys.
 ; file-read-data, not file-read*: stat stays allowed, so git and jevify can walk

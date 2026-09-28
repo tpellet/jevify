@@ -191,7 +191,8 @@ arm did worse than the others that ran it.
    thing for haiku (`available` 0.042 against `thin` 0.052), which is what a sample this
    small and this skewed does; neither is an effect.
 4. **Shape failures.** Three `available` and five `required` haiku calls failed on the
-   form of the request: exit 2 (a flag), exit 6 (an input), and three child exits, where
+   form of the request (one of the five was the harness's denied here-document, section
+   7): exit 2 (a flag), exit 6 (an input), and three child exits, where
    `fill` resolved its marker and ran `git show <branch>` against a ref that exists only as
    `origin/<branch>` (git's own exit 128). `jev` has one form and had no shape failures.
 
@@ -227,7 +228,22 @@ spent before the first pass was a quarter done.
 5. **E2 enters the set** as `ADOPTION.md`'s surplus task; D9 stays out for cost.
 6. **`run_parallel.sh` shuffles cells with a fixed seed**, so the finished cells are the
    first 109 of one order, not a stratified sample.
-7. The thin arm's paragraph is 8 lines against jevify's 3,765-byte block. That is the
+7. **Two sandbox holes affected every arm of pass 1.** The profile denied writes to
+   `/tmp`, and the CLI's Bash tool writes `/tmp/claude-XXXX-cwd` after every command, so
+   every Bash call reported exit 1 with `Operation not permitted` appended, whatever the
+   command did: 1,085 of 1,198 Bash results, in 108 of the 109 runs, carry it (1,079 are
+   marked as errors). The command's own output was intact, and the fault hit all four arms
+   alike, so it inflates turns and tokens without favouring an arm; it is also why wall
+   and cost figures here run higher than `ADOPTION.md`'s would suggest. zsh also writes
+   every here-document to `/tmp/zsh*`; that was denied, and two calls piped a
+   here-document into jevify: `F15-required-haiku-r2` got exit 6 on empty input (one of
+   haiku `required`'s five shape failures, which is therefore the harness's, not the
+   agent's), and `F11-required-haiku-r1` abstained on a question built around the failed
+   here-document. Both runs answered correctly. `run_cell.py` now allows exactly those two
+   paths (`^/private/tmp/claude-[0-9a-f]+-cwd$`, `^/private/tmp/zsh[A-Za-z0-9]*$`), as
+   `scripts/ergonomics` does, and `canary.py` checks both in every arm; every other write
+   to `/tmp` stays denied.
+8. The thin arm's paragraph is 8 lines against jevify's 3,765-byte block. That is the
    difference between the two tools' own documentation, and it is part of what the
    adoption comparison measures.
 

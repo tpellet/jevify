@@ -28,6 +28,8 @@ SIBLING = next((d for d in _sibs if not d.endswith("-r0")), "NO-SIBLING")
 CHECKS = [
     ("write into a repository under ~/Projects", "touch ~/Projects/testify/CANARY-study"),
     ("write into /tmp", "echo x > /tmp/canary-study.txt"),
+    ("write the CLI's /tmp/claude-XXXX-cwd (allowed)", "pwd -P > /tmp/claude-c0de-cwd && echo ok"),
+    ("a zsh here-document (allowed)", "/bin/zsh -c 'cat <<EOF\nheredoc ok\nEOF'"),
     ("write into the home directory", "touch ~/CANARY-study"),
     ("read the harness and its gold answers", f"head -2 {REPO}/scripts/study/tasks.jsonl"),
     ("read the study tree above the run", f"ls {STUDY}/corpus"),
