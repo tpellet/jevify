@@ -1,29 +1,40 @@
 # scripts/study — the paired study harness
 
-One cell is one task, one arm, one repetition. Three arms:
+One cell is one task, one arm, one model, one repetition. Four arms:
 
-| arm | jevify | what the prompt says | what the arm answers |
+| arm | tool | what the prompt says | what the arm answers |
 |:---|:---|:---|:---|
-| `control` | not installed | "not installed on this machine" | the floor |
-| `available` | installed | where it is, plus `jevify init agents`, once | does an agent reach for it |
-| `required` | installed | the same, plus one sentence telling it to | does it help when used |
+| `control` | none | "jevify is not installed on this machine" | the floor |
+| `thin` | `scripts/thinjev/jev` | where it is, plus its usage, once | what the bare model adds, without jevify |
+| `available` | jevify | where it is, plus `jevify init agents`, once | does an agent reach for it |
+| `required` | jevify | the same, plus one sentence telling it to | does it help when used |
 
 `available` and `required` get the same Seatbelt profile; the prompt is the only
-difference between them. The three are reported separately and never averaged:
-`available` measures adoption, `required` measures efficacy, and averaging them
-answers neither question.
+difference between them. `thin` is `available` with jevify swapped for `jev`, one
+keyless call to the same model ranking the options the agent hands it, with no
+listers, no evidence, no second round and no threshold: `thin` against
+`available` is what jevify adds over a wrapper of the API. The four are reported
+separately and never averaged: `available` measures adoption, `required`
+measures efficacy, and averaging them answers neither question.
 
 ```
-sh  scripts/study/setup.sh [path-to-jevify]   # clone and pin the corpus, stage the binary
-python3 scripts/study/baseline.py             # prove the tasks are not lexically reachable
+sh  scripts/study/setup.sh [path-to-jevify]   # clone and pin the corpus, stage jevify and jev
+python3 scripts/study/baseline.py D1 F1 ...   # prove the tasks are not lexically reachable
 python3 scripts/study/canary.py               # what the sandbox lets each arm do
-sh  scripts/study/run_study.sh "D1 D2" 3      # 2 tasks x 3 arms x 3 reps
+python3 scripts/study/price.py --from ~/jevify-study-d --tasks 17 --block haiku:4:control,thin
+P=6 MODELS="haiku:4:1 sonnet:2:2" sh scripts/study/run_parallel.sh "D1 D2"   # 6 cells at a time
+sh  scripts/study/run_study.sh "D1 D2" 3      # the same, one cell at a time
 python3 scripts/study/blind.py                # arm-free records + the unblinding map
 python3 scripts/study/score.py                # score them without seeing the arm
-python3 scripts/study/unblind.py              # join; per-cell and per-arm intervals, adoption
+python3 scripts/study/unblind.py --max-rep 4  # join; per model and arm: intervals, adoption, exits
 python3 scripts/study/probe.py                # what one jevify call costs per task
-python3 scripts/study/price.py --tasks 8 --reps 5   # project the full run
 ```
+
+`run_parallel.sh` creates every run directory of the block before the first
+cell starts, so each profile denies reading every sibling, and appends its
+concurrency to `$JEVSTUDY/concurrency.log`: at `P=6` a cell's wall time includes
+waiting on five others and on the shared keyless backend, and a report quoting
+wall time says so.
 
 ## The task set has to be one lexical search cannot answer
 

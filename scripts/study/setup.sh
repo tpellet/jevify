@@ -34,8 +34,11 @@ PY
 
 cp "$BIN" "$STUDY/bin/jevify"
 cp "$REPO/scripts/study/jevify_log.py" "$STUDY/bin/jevify_log.py"
+cp "$REPO/scripts/thinjev/jev" "$STUDY/bin/jev"
+shasum -a 256 "$STUDY/bin/jev" | cut -d' ' -f1 > "$STUDY/bin/jev.sha256"
 "$STUDY/bin/jevify" init agents > "$STUDY/bin/init-agents.txt"
 "$STUDY/bin/jevify" --version > "$STUDY/bin/VERSION.txt"
 shasum -a 256 "$STUDY/bin/jevify" | cut -d' ' -f1 > "$STUDY/bin/jevify.sha256"
 echo "jevify   $(cat "$STUDY/bin/VERSION.txt") $(cat "$STUDY/bin/jevify.sha256")"
 echo "agents block $(wc -c < "$STUDY/bin/init-agents.txt" | tr -d ' ') bytes"
+echo "jev      $(cat "$STUDY/bin/jev.sha256")"

@@ -1,24 +1,32 @@
 #!/usr/bin/env python3
 """Join the blind scores to the arms and report each arm on its own.
 
-    python3 scripts/study/unblind.py            # the whole report
-    python3 scripts/study/unblind.py --tasks D1,D2
+    python3 scripts/study/unblind.py                       # the whole report
+    python3 scripts/study/unblind.py --tasks D1,D2 --model haiku --max-rep 4
+    python3 scripts/study/unblind.py --json summary.json   # the per-arm figures, machine-readable
 
-Runs after score.py. Three arms, reported separately and never averaged:
+Runs after score.py. Four arms, reported separately per model and never averaged:
 
     control    jevify not installed; the floor
+    thin       the thin baseline `jev` installed and mentioned once: one keyless
+               Jev call ranking the options the agent passes, nothing else
     available  jevify installed and mentioned once; ADOPTION is measured here
     required   the agent was told to use it; efficacy when used is measured here
 
 Correctness is always k of n with a 95 % Wilson interval, never a bare count.
-The adoption rate is the number this study exists to get: an agent that was
-given the tool and reached for grep instead is the finding, whatever the
-correctness columns say.
 
-For the required arm two further figures: how often jevify was called at all,
-and how often what jevify printed became the agent's answer. The second needs
-the tool's own output, which the wrapper records, because a run can call the
-tool, ignore it, and still be right.
+Every tool call is put in one exit class. jevify's own contract: 0 ok, 1 no,
+2 usage, 3 abstain, 4 unavailable, 5 auth, 6 input. A `fill` call runs a child
+command after resolving its markers, and the child owns the exit code from then
+on: when the call's --dry-run shadow resolved (exit 0) and the real call exited
+non-zero, or the exit is outside the contract (git's 128), the class is `child`,
+not jevify's. `usage`, `input` and `child` together are shape failures -- the
+agent asked in a form that could not work -- and are counted apart from
+abstentions, which are the tool saying nothing fits.
+
+For each tool arm: how often the tool's top answer named the gold, and how often
+it named the gold and the agent answered it or answered otherwise. For `jev` the
+top answer is its first line; for jevify it is what the call printed.
 """
 
 import argparse
@@ -32,8 +40,11 @@ import statistics
 import subprocess
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
-ARMS = ("control", "available", "required")
-ABSTAIN = 3  # jevify's exit code for "nothing fits, or unsure"
+ARMS = ("control", "thin", "available", "required")
+TOOL_ARMS = ("thin", "available", "required")
+JEVIFY_EXIT = {0: "ok", 1: "no", 2: "usage", 3: "abstain", 4: "unavailable", 5: "auth", 6: "input",
+               130: "declined"}
+SHAPE = ("usage", "input", "child")
 
 
 def _study_dir():
@@ -57,16 +68,21 @@ def wilson(k, n, z=1.96):
     return ((c - h) / d, (c + h) / d)
 
 
+_SHA = {}
+
+
 def full_sha(repo, ref):
     if not ref or not all(c in "0123456789abcdefABCDEF" for c in ref) or len(ref) < 7:
         return None
-    p = subprocess.run(["git", "-C", str(STUDY / "corpus" / repo), "rev-parse", "--verify", f"{ref}^{{commit}}"],
-                       capture_output=True, text=True)
-    return p.stdout.strip() if p.returncode == 0 else None
+    if (repo, ref) not in _SHA:
+        p = subprocess.run(["git", "-C", str(STUDY / "corpus" / repo), "rev-parse", "--verify", f"{ref}^{{commit}}"],
+                           capture_output=True, text=True)
+        _SHA[(repo, ref)] = p.stdout.strip() if p.returncode == 0 else None
+    return _SHA[(repo, ref)]
 
 
 def matches_gold(task, text):
-    """Does this blob of text name the gold answer? Used on what jevify printed,
+    """Does this blob of text name the gold answer? Used on what a tool printed,
     never on what the agent answered: the agent's answer is scored blind."""
     if not text:
         return False
@@ -87,23 +103,73 @@ def calls_of(run):
 
 
 def printed(call):
-    """Everything jevify showed the agent for this call: the plain output it
-    replayed, plus the matches its envelope named."""
-    parts = [call.get("stdout_head") or ""]
+    """What the tool showed as its answer. jev ranks every option it was given,
+    so only its first line is an answer; jevify prints what it chose, plus the
+    shadow envelope when the agent did not ask for one."""
+    if call.get("tool") == "jev":
+        first = (call.get("stdout_head") or "").split("\n", 1)[0]
+        return first.split("\t", 1)[1] if "\t" in first else ""
     sh = call.get("shadow") or {}
-    parts.append(sh.get("stdout_head") or "")
-    return "\n".join(parts)
+    return "\n".join([call.get("stdout_head") or "", sh.get("stdout_head") or ""])
+
+
+def exit_class(call):
+    ex = call.get("exit")
+    if call.get("tool") == "jev":
+        return {0: "ok", 2: "usage", 4: "unavailable"}.get(ex, f"exit-{ex}")
+    sh = call.get("shadow") or {}
+    if call.get("verb") == "fill" and ex not in (0, None) and sh.get("exit") == 0:
+        return "child"
+    return JEVIFY_EXIT.get(ex, "child")
+
+
+def med(xs):
+    return statistics.median(xs) if xs else 0
+
+
+def summarise(rs):
+    ok = [r for r in rs if r["score"]["status"] != "refused_leak"]
+    k, n = sum(r["score"]["correct"] or 0 for r in ok), len(ok)
+    lo, hi = wilson(k, n)
+    g = lambda key: [r["meta"].get(key) or 0 for r in rs]  # noqa: E731
+    calls = [c for r in rs for c in r["calls"]]
+    classes = collections.Counter(exit_class(c) for c in calls)
+    adopted = [r for r in rs if r["calls"]]
+    named = [r for r in adopted if any(matches_gold(TASKS[r["task"]], printed(c)) for c in r["calls"])]
+    became = [r for r in named if r["score"]["correct"] == 1]
+    s = {
+        "runs": len(rs), "correct": k, "scored": n, "refused": len(rs) - n,
+        "wilson": [round(lo, 3), round(hi, 3)],
+        "adopted": len(adopted), "adoption_wilson": [round(x, 3) for x in wilson(len(adopted), len(rs))],
+        "calls": len(calls), "calls_per_adopting_run": round(len(calls) / len(adopted), 2) if adopted else 0,
+        "exit_classes": dict(classes),
+        "abstentions": classes.get("abstain", 0),
+        "shape_failures": sum(classes.get(c, 0) for c in SHAPE),
+        "tool_named_gold": len(named), "tool_named_gold_agent_right": len(became),
+        "tool_named_gold_agent_wrong": len(named) - len(became),
+        "keyless_requests": sum(g("jevify_requests")), "keyless_classifications": sum(g("jevify_questions")),
+        "jev_calls": sum(1 for c in calls if c.get("tool") == "jev"),
+    }
+    for key in ("turns", "input_tokens", "wall_s", "agent_cost_usd"):
+        s[key] = {"sum": round(sum(g(key)), 4), "median": round(med(g(key)), 4)}
+    s["stops"] = dict(collections.Counter(str(r["meta"].get("stop")) for r in rs))
+    return s
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--tasks", help="comma-separated task ids to report; default all present")
+    ap.add_argument("--model", help="report one model only (haiku, sonnet)")
+    ap.add_argument("--arms", default=",".join(ARMS))
     ap.add_argument("--max-rep", type=int, default=None,
                     help="ignore repetitions above this. Pilot and canary cells live in the same "
                          "runs/ directory and are numbered above the study's, and nothing may be "
                          "deleted from a finished study tree, so they are excluded by number.")
+    ap.add_argument("--json", help="write the per-(model, arm) summary here")
+    ap.add_argument("--quiet", action="store_true", help="no per-run table and no call list")
     a = ap.parse_args()
     keep = set(a.tasks.split(",")) if a.tasks else None
+    arms = [x for x in ARMS if x in a.arms.split(",")]
 
     m = json.loads((STUDY / "unblind_map.json").read_text())
     scored = {r["bid"]: r for r in (json.loads(l) for l in (STUDY / "scored.jsonl").read_text().splitlines() if l.strip())}
@@ -118,111 +184,78 @@ def main():
     for bid, info in m.items():
         if bid not in scored or info["rid"] not in runs:
             continue
+        info = {**info, "model": info.get("model") or runs[info["rid"]][1].get("model", "haiku")}
         if keep and info["task"] not in keep:
             continue
-        if info["arm"] not in ARMS:
+        if info["arm"] not in arms or (a.model and info["model"] != a.model):
             continue
-        if a.max_rep is not None and info["rep"] > a.max_rep:
+        if info["rep"] < 1 or (a.max_rep is not None and info["rep"] > a.max_rep):
             continue
         d, meta = runs[info["rid"]]
         rows.append({**info, "score": scored[bid], "dir": d, "meta": meta,
                      "calls": calls_of(d), "answer": (d / "answer.txt").read_text().strip()})
-    rows.sort(key=lambda r: (r["task"], ARMS.index(r["arm"]), r["rep"]))
+    rows.sort(key=lambda r: (r["model"], r["task"], ARMS.index(r["arm"]), r["rep"]))
     if not rows:
-        raise SystemExit("no runs in the three arms; run run_study.sh first")
+        raise SystemExit("no runs match; run run_parallel.sh, blind.py and score.py first")
+    models = sorted({r["model"] for r in rows})
 
-    print(f"{'rid':26s} {'status':13s} {'ok':3s} {'turns':>5s} {'tools':>5s} {'in_tok':>8s} "
-          f"{'wall_s':>7s} {'agent$':>8s} {'jev':>4s} {'req':>4s} {'used':>5s} {'mtime':>6s}")
-    for r in rows:
-        meta, sc = r["meta"], r["score"]
-        used = "-" if not r["calls"] else ("yes" if any(matches_gold(TASKS[r["task"]], printed(c)) and
-                                                       matches_gold(TASKS[r["task"]], r["answer"])
-                                                       for c in r["calls"]) else "no")
-        print(f"{r['rid']:26s} {sc['status']:13s} {str(sc['correct']):3s} "
-              f"{str(meta.get('turns')):>5s} {str(meta.get('tool_uses')):>5s} "
-              f"{str(meta.get('input_tokens')):>8s} {str(meta.get('wall_s')):>7s} "
-              f"{meta.get('agent_cost_usd') or 0:8.4f} {str(meta.get('jevify_calls')):>4s} "
-              f"{str(meta.get('jevify_requests')):>4s} {used:>5s} "
-              f"{len(meta.get('mtime_moved_outside_run') or []):>6d}")
+    if not a.quiet:
+        print(f"{'rid':30s} {'status':13s} {'ok':3s} {'turns':>5s} {'in_tok':>9s} "
+              f"{'wall_s':>7s} {'agent$':>8s} {'calls':>5s} {'exits':14s}")
+        for r in rows:
+            meta, sc = r["meta"], r["score"]
+            print(f"{r['rid']:30s} {sc['status']:13s} {str(sc['correct']):3s} "
+                  f"{str(meta.get('turns')):>5s} {str(meta.get('input_tokens')):>9s} {str(meta.get('wall_s')):>7s} "
+                  f"{meta.get('agent_cost_usd') or 0:8.4f} {len(r['calls']):5d} "
+                  f"{','.join(exit_class(c) for c in r['calls'])[:40]}")
 
-    # ---- correctness per cell, then per arm
-    cells = collections.defaultdict(list)
-    for r in rows:
-        cells[(r["task"], r["arm"])].append(r)
-    print(f"\n{'cell':26s} {'k/n':>7s}  95% Wilson       refused")
-    for (task, arm), rs in sorted(cells.items(), key=lambda kv: (kv[0][0], ARMS.index(kv[0][1]))):
-        ok = [r for r in rs if r["score"]["status"] != "refused_leak"]
-        k, n = sum(r["score"]["correct"] or 0 for r in ok), len(ok)
-        lo, hi = wilson(k, n)
-        print(f"{task + ' ' + arm:26s} {k:3d}/{n:<3d}  [{lo:.2f}, {hi:.2f}]   "
-              f"{len(rs) - len(ok)}")
+    out = {}
+    for model in models:
+        print(f"\n===== model {model}")
+        mrows = [r for r in rows if r["model"] == model]
+        print(f"{'cell':22s} " + " ".join(f"{x:>11s}" for x in arms))
+        for task in sorted({r["task"] for r in mrows}, key=lambda t: (t[0], int(t[1:]))):
+            cells = []
+            for arm in arms:
+                rs = [r for r in mrows if r["task"] == task and r["arm"] == arm]
+                k = sum(r["score"]["correct"] or 0 for r in rs)
+                cells.append(f"{k}/{len(rs)}" if rs else "-")
+            print(f"{task:22s} " + " ".join(f"{c:>11s}" for c in cells))
+        print(f"\n{'arm':10s} {'k/n':>8s}  95% Wilson    adopt  calls  shape  abst  named/right/wrong"
+              f"   turns[med]   in_tok[med]      wall[med]   usd[med]")
+        for arm in arms:
+            rs = [r for r in mrows if r["arm"] == arm]
+            if not rs:
+                continue
+            s = summarise(rs)
+            out[f"{model}/{arm}"] = s
+            print(f"{arm:10s} {s['correct']:3d}/{s['scored']:<4d} [{s['wilson'][0]:.2f}, {s['wilson'][1]:.2f}]  "
+                  f"{s['adopted']:2d}/{s['runs']:<3d} {s['calls']:5d} {s['shape_failures']:6d} {s['abstentions']:5d}  "
+                  f"{s['tool_named_gold']:3d}/{s['tool_named_gold_agent_right']}/{s['tool_named_gold_agent_wrong']}"
+                  f"      {s['turns']['sum']:5.0f}[{s['turns']['median']:.0f}] "
+                  f"{s['input_tokens']['sum']:11,.0f}[{s['input_tokens']['median']:,.0f}] "
+                  f"{s['wall_s']['sum']:7.0f}[{s['wall_s']['median']:.0f}] "
+                  f"{s['agent_cost_usd']['sum']:7.2f}[{s['agent_cost_usd']['median']:.3f}]")
+            if s["exit_classes"]:
+                print(f"{'':10s} exits {s['exit_classes']}  stops {s['stops']}")
 
-    print(f"\n{'arm':10s} {'k/n':>8s}  95% Wilson      {'turns':>6s} {'in_tok':>10s} "
-          f"{'wall_s':>8s} {'agent$':>8s}   (sums; median in brackets)")
-    for arm in ARMS:
-        rs = [r for r in rows if r["arm"] == arm]
-        if not rs:
-            continue
-        ok = [r for r in rs if r["score"]["status"] != "refused_leak"]
-        k, n = sum(r["score"]["correct"] or 0 for r in ok), len(ok)
-        lo, hi = wilson(k, n)
-        g = lambda key: [r["meta"].get(key) or 0 for r in rs]  # noqa: E731
-        print(f"{arm:10s} {k:3d}/{n:<4d}  [{lo:.2f}, {hi:.2f}]   "
-              f"{sum(g('turns')):6d} {sum(g('input_tokens')):10,d} {sum(g('wall_s')):8.1f} "
-              f"{sum(g('agent_cost_usd')):8.4f}")
-        print(f"{'':10s} {'':8s}  {'':16s}   "
-              f"[{statistics.median(g('turns')):.0f}] [{statistics.median(g('input_tokens')):,.0f}] "
-              f"[{statistics.median(g('wall_s')):.1f}] [{statistics.median(g('agent_cost_usd')):.4f}]")
-
-    # ---- the number this study exists to get
-    av = [r for r in rows if r["arm"] == "available"]
-    if av:
-        used = [r for r in av if r["calls"]]
-        lo, hi = wilson(len(used), len(av))
-        print(f"\nADOPTION, available arm: {len(used)}/{len(av)} runs called jevify at least once "
-              f"= {len(used) / len(av):.0%}  95% Wilson [{lo:.2f}, {hi:.2f}]")
-        by = collections.Counter(r["task"] for r in used)
-        print("  per task: " + "  ".join(
-            f"{t}:{by.get(t, 0)}/{sum(1 for r in av if r['task'] == t)}"
-            for t in sorted({r['task'] for r in av})))
-
-    rq = [r for r in rows if r["arm"] == "required"]
-    if rq:
-        called = [r for r in rq if r["calls"]]
-        became = [r for r in called
-                  if any(matches_gold(TASKS[r["task"]], printed(c)) for c in r["calls"])
-                  and matches_gold(TASKS[r["task"]], r["answer"])]
-        ignored = [r for r in called
-                   if any(matches_gold(TASKS[r["task"]], printed(c)) for c in r["calls"])
-                   and not matches_gold(TASKS[r["task"]], r["answer"])]
-        print(f"\nREQUIRED arm: called jevify {len(called)}/{len(rq)}; "
-              f"jevify named the gold and the agent answered it {len(became)}/{len(rq)}; "
-              f"jevify named the gold and the agent answered otherwise {len(ignored)}/{len(rq)}")
-
-    # ---- every jevify call that abstained or named something other than the gold
-    print("\njevify calls that abstained or did not name the gold")
-    bad = 0
-    for r in rows:
-        for i, c in enumerate(r["calls"], 1):
-            ex = c.get("exit")
-            names = matches_gold(TASKS[r["task"]], printed(c))
-            if ex == ABSTAIN or not names:
-                bad += 1
-                why = "abstained" if ex == ABSTAIN else f"exit {ex}, did not name the gold"
-                out = " ".join((c.get("stdout_head") or "").split())[:110]
-                print(f"  {r['rid']} call {i}: {why}\n"
-                      f"      argv   {' '.join(c.get('argv') or [])[:150]}\n"
-                      f"      printed {out or '(nothing)'}\n"
-                      f"      gold   {TASKS[r['task']]['gold']}   agent answered {r['answer'] or '(nothing)'}")
-    if not bad:
-        print("  none")
-
-    moved = [(r["rid"], r["meta"].get("mtime_moved_outside_run") or []) for r in rows
-             if r["meta"].get("mtime_moved_outside_run")]
-    print(f"\nruns with an mtime moving outside their directory: {len(moved)} of {len(rows)}"
-          " (an mtime, not a writer: see run_cell.scan; canary.py is the containment evidence)")
-    for rid, files in moved[:10]:
-        print(f"  {rid}: {files[:4]}")
+    if not a.quiet:
+        print("\ntool calls that abstained, failed on shape, or did not name the gold")
+        for r in rows:
+            for i, c in enumerate(r["calls"], 1):
+                cls = exit_class(c)
+                if cls == "ok" and matches_gold(TASKS[r["task"]], printed(c)):
+                    continue
+                err = " ".join((c.get("stderr_head") or "").split())[:110]
+                outp = " ".join((c.get("stdout_head") or "").split())[:110]
+                print(f"  {r['rid']} call {i}: {cls}\n"
+                      f"      argv    {' '.join(c.get('argv') or [])[:150]}\n"
+                      f"      stdout  {outp or '(nothing)'}\n"
+                      f"      stderr  {err or '(nothing)'}\n"
+                      f"      gold    {TASKS[r['task']]['gold']}   agent answered {r['answer'] or '(nothing)'}")
+    if a.json:
+        pathlib.Path(a.json).write_text(json.dumps(out, indent=1))
+        print(f"\nsummary -> {a.json}")
 
 
 if __name__ == "__main__":

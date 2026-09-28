@@ -18,7 +18,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from run_cell import ARMS, STUDY, HOME, REPO, TASKS, HAS_JEVIFY, build, marker, scan  # noqa: E402
+from run_cell import ARMS, STUDY, HOME, REPO, TASKS, HAS_JEVIFY, TOOL, build, marker, scan  # noqa: E402
 
 # a run directory that is not this canary's own, so the sibling rules are what
 # is being tested. The newest one that exists; the check is skipped if there is none.
@@ -38,6 +38,8 @@ CHECKS = [
     ("exec the installed jevify", "~/.cargo/bin/jevify --version"),
     ("exec jevify from a target/ directory", f"{HOME}/Projects/jevify/target/release/jevify --version"),
     ("exec the study's jevify (the logged copy)", f"{STUDY}/bin/jevify --version"),
+    ("run the study's jev (the thin baseline)", f"python3 {STUDY}/bin/jev --help 2>&1 | grep -q usage"),
+    ("read the thin baseline in the repository", f"head -1 {REPO}/scripts/thinjev/jev"),
     ("cd out of the working directory and write", "cd ~ && touch CANARY-study-cd"),
     ("cd into the harness and read it", f"cd {REPO} && head -1 AGENTS.md"),
     ("write inside the run's own working directory", "touch ok.txt && echo ok"),
@@ -79,6 +81,16 @@ def main():
                                env={**os.environ, "TMPDIR": str(run / "tmp"), "PWD": str(run / "work")})
             print(f"  wrapper    exit={q.returncode:<4d} {'jevify pick through the logged wrapper':48s} "
                   f"{q.stdout.strip()[:60]}")
+            log = (run / "jevify.jsonl").read_text().strip().splitlines()
+            print(f"  log line   {log[-1][:160] if log else 'NOTHING LOGGED'}")
+        if TOOL[arm] == "jev":
+            w = run / "bin" / "jev"
+            q = subprocess.run(["/usr/bin/sandbox-exec", "-f", str(run / "profile.sb"), "/bin/sh", "-c",
+                                f"printf 'alpha the cat sleeps\nbeta the dog barks\n' | {w} 'the one about a dog'"],
+                               cwd=str(run / "work"), capture_output=True, text=True,
+                               env={**os.environ, "TMPDIR": str(run / "tmp"), "PWD": str(run / "work")})
+            print(f"  wrapper    exit={q.returncode:<4d} {'jev through the logged wrapper':48s} "
+                  f"{' | '.join(q.stdout.strip().splitlines())[:60]}")
             log = (run / "jevify.jsonl").read_text().strip().splitlines()
             print(f"  log line   {log[-1][:160] if log else 'NOTHING LOGGED'}")
         left = scan(run)

@@ -3,9 +3,12 @@
 
     python3 scripts/study/run_cell.py --task D1 --arm available --rep 1
 
-Three arms, never averaged together:
+Four arms, never averaged together:
 
     control    jevify is not installed and the prompt says so
+    thin       jevify is not installed; the thin baseline scripts/thinjev/jev (one
+               keyless Jev call ranking options, nothing else) is, mentioned once
+               the way `available` mentions jevify
     available  jevify is installed, the prompt mentions it once and hands over its
                own documentation; whether the agent reaches for it is the
                measurement
@@ -22,9 +25,10 @@ Layout, all outside the repository, under $JEVSTUDY (default ~/jevify-study):
 
     corpus/<repo>/          the pinned clone, never touched by a run
     bin/jevify              the binary under study, the only copy a run can exec
-    runs/<task>-<arm>-r<n>/
+    bin/jev                 the thin baseline, the only copy the thin arm can run
+    runs/<task>-<arm>-<model>-r<n>/
         work/<repo>/        an APFS clone of the pinned repo, the run's own
-        bin/jevify          the logging wrapper (with arm only)
+        bin/jevify, bin/jev the logging wrapper (jevify arms, thin arm)
         cache/ tmp/         the run's own answer cache and temp dir
         profile.sb          the Seatbelt profile
         prompt.txt          the exact prompt, byte for byte
@@ -99,18 +103,25 @@ PROFILE = """(version 1)
 {arm}
 """
 
-# The three arms differ in the profile by exactly these two lines, and in the
-# prompt by exactly one paragraph. `available` and `required` get the same
-# profile; what separates them is what the prompt says, which is the whole point
-# of having both.
-ALLOW_JEVIFY = """(allow file-read* (literal "{study}/bin/jevify"))
-(allow process-exec* (literal "{study}/bin/jevify"))
+# The arms differ in the profile by exactly these lines, and in the prompt by
+# exactly one paragraph. `available` and `required` get the same profile; what
+# separates them is what the prompt says, which is the whole point of having
+# both. `thin` swaps jevify for the thin baseline scripts/thinjev/jev: the same
+# model behind one keyless call, without listers, evidence, rounds or threshold.
+ALLOW = """(allow file-read* (literal "{study}/bin/{tool}"))
+(allow process-exec* (literal "{study}/bin/{tool}"))
 """
-DENY_JEVIFY = """(deny file-read* (literal "{study}/bin/jevify"))
-(deny process-exec* (literal "{study}/bin/jevify"))
+DENY = """(deny file-read* (literal "{study}/bin/{tool}"))
+(deny process-exec* (literal "{study}/bin/{tool}"))
 """
-ARMS = ("control", "available", "required")
-HAS_JEVIFY = {"control": False, "available": True, "required": True}
+ARMS = ("control", "thin", "available", "required")
+HAS_JEVIFY = {"control": False, "thin": False, "available": True, "required": True}
+TOOL = {"control": None, "thin": "jev", "available": "jevify", "required": "jevify"}
+
+
+def arm_rules(arm, study):
+    return "".join((ALLOW if TOOL[arm] == tool else DENY).format(study=study, tool=tool)
+                   for tool in ("jevify", "jev"))
 
 HEAD = """You are answering one question about a local git repository. Work read-only.
 
@@ -145,6 +156,22 @@ CONTROL_DOC = """
 The tool jevify is not installed on this machine.
 """
 
+# `thin` is `available` with the thin baseline in place of jevify: the tool, its
+# path and its own usage, told once and not required. The usage is the whole of
+# what `jev` can do, the way `jevify init agents` is the whole of jevify.
+THIN_DOC = """
+The command-line tool jev is installed at {jev}. Call it by that full path.
+Its documentation for agents follows.
+
+# jev
+jev ranks a list of options against a question about meaning, using the Jev
+model through one call.
+  jev "question" option1 option2 ...
+  some-command | jev "question"        # one option per stdin line
+It prints every option as probability<TAB>option, best first. 2 to 100 options,
+each at most 200 characters. Exit codes: 0 ok, 2 bad input, 4 service unavailable.
+"""
+
 
 def sh(*a, **kw):
     return subprocess.run(a, capture_output=True, text=True, **kw)
@@ -152,7 +179,9 @@ def sh(*a, **kw):
 
 def build(task_id, arm, rep, model, per_run_config=False):
     t = TASKS[task_id]
-    rid = f"{task_id}-{arm}-r{rep}"
+    # the model is part of the cell: a haiku run and a sonnet run of the same task,
+    # arm and repetition are two cells, not one cell run twice
+    rid = f"{task_id}-{arm}-{model}-r{rep}"
     run = STUDY / "runs" / rid
     for d in ("work", "cache", "tmp", "bin"):
         (run / d).mkdir(parents=True, exist_ok=True)
@@ -179,7 +208,7 @@ def build(task_id, arm, rep, model, per_run_config=False):
     (run / "jevify.jsonl").write_text("")
     scratch = pathlib.Path("/private/tmp/claude-501") / ("-" + str(run / "work").strip("/").replace("/", "-"))
     scratch.mkdir(parents=True, exist_ok=True)
-    arm_rules = (ALLOW_JEVIFY if HAS_JEVIFY[arm] else DENY_JEVIFY).format(study=STUDY)
+    rules = arm_rules(arm, STUDY)
     if per_run_config:
         claude_home = run / "claude-config"
         claude_home.mkdir(parents=True, exist_ok=True)
@@ -196,7 +225,7 @@ def build(task_id, arm, rep, model, per_run_config=False):
     (run / "profile.sb").write_text(PROFILE.format(
         run=run, claude_home=claude_home, claude_read_denies=claude_read_denies,
         scratch=scratch, tmpdir=run / "tmp",
-        repo=REPO, study=STUDY, home=HOME, arm=arm_rules, siblings=siblings))
+        repo=REPO, study=STUDY, home=HOME, arm=rules, siblings=siblings))
 
     prompt = HEAD.format(answer_format=t["answer_format"])
     if HAS_JEVIFY[arm]:
@@ -209,6 +238,14 @@ def build(task_id, arm, rep, model, per_run_config=False):
         block = (STUDY / "bin" / "init-agents.txt").read_text().strip()
         prompt += (REQUIRED_DOC if arm == "required" else AVAILABLE_DOC).format(
             jevify=wrapper, block=block)
+    elif arm == "thin":
+        # logged exactly like jevify: every call, its argv, exit, stdout and stderr
+        wrapper = run / "bin" / "jev"
+        wrapper.write_text(
+            "#!/bin/sh\n"
+            f'JEVSTUDY_LOG="{run}/jevify.jsonl" exec python3 "{STUDY}/bin/jevify_log.py" --thinjev "$@"\n')
+        wrapper.chmod(0o755)
+        prompt += THIN_DOC.format(jev=wrapper)
     else:
         prompt += CONTROL_DOC
     prompt += "\nTask: " + t["question"].format(repo=dst) + "\n"
@@ -327,7 +364,7 @@ def main():
     # into the agent's context, which costs tokens and is not the task
     env["PWD"] = str(run / "work")
     env["JEVIFY_CACHE_DIR"] = str(run / "cache")
-    env["PATH"] = f"{run / 'bin'}:{env['PATH']}" if HAS_JEVIFY[a.arm] else env["PATH"]
+    env["PATH"] = f"{run / 'bin'}:{env['PATH']}" if TOOL[a.arm] else env["PATH"]
     # per-run, so no two cells share a configuration directory and nothing a cell
     # writes there can reach another. The OAuth credentials this machine
     # authenticates with live in the Keychain, not in the configuration
@@ -384,6 +421,9 @@ def main():
                 for c in (m.get("message") or {}).get("content") or [] if c.get("type") == "tool_use")
     meta = {
         "rid": rid, "task": a.task, "arm": a.arm, "rep": a.rep, "model": a.model,
+        "tool": TOOL[a.arm], "budget_usd": a.budget,
+        "binary_sha256": (STUDY / "bin" / "jevify.sha256").read_text().strip()
+                         if (STUDY / "bin" / "jevify.sha256").exists() else None,
         "repo": t["repo"], "pin": t["pin"],
         "turns": res.get("num_turns"), "tool_uses": tools,
         "input_tokens": (u.get("input_tokens") or 0) + (u.get("cache_read_input_tokens") or 0)

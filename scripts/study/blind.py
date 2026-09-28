@@ -13,7 +13,7 @@ name the arm, the repetition, the model, the run directory or the wall time,
 and `bid` is sha256(rid) truncated, which carries no arm: the two arms of a
 pair hash to unrelated strings and the directory listing is in hash order.
 
-    $JEVSTUDY/unblind_map.json   bid -> {rid, task, arm, rep}
+    $JEVSTUDY/unblind_map.json   bid -> {rid, task, arm, rep, model}
 
 is written outside blind/ so that score.py, which opens only blind/*.json and
 the task file, cannot reach it.
@@ -97,7 +97,8 @@ def main():
                "answer": (run / "answer.txt").read_text().strip(),
                "leaked": bool(reasons), "leak": reasons}
         (blind / f"{bid}.json").write_text(json.dumps(rec, indent=1))
-        mapping[bid] = {"rid": meta["rid"], "task": meta["task"], "arm": meta["arm"], "rep": meta["rep"]}
+        mapping[bid] = {"rid": meta["rid"], "task": meta["task"], "arm": meta["arm"], "rep": meta["rep"],
+                        "model": meta.get("model", "haiku")}
         n += 1
     (STUDY / "unblind_map.json").write_text(json.dumps(mapping, indent=1))
     print(f"blinded {n} runs into {blind}; map in {STUDY / 'unblind_map.json'}")

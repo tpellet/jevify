@@ -4,7 +4,7 @@
 #   sh scripts/study/run_study.sh "D1 D2" 3 haiku
 #   ARMS="available required" sh scripts/study/run_study.sh "D1" 5
 #
-# Three arms by default: control, available, required. They are reported
+# Four arms by default: control, thin, available, required. They are reported
 # separately and never averaged, so nothing here mixes them either.
 #
 # Sequential on purpose: two runs at once share the machine and the keyless
@@ -15,7 +15,7 @@ set -u
 TASKS="${1:?usage: run_study.sh \"D1 D2\" <reps> [model]}"
 REPS="${2:-3}"
 MODEL="${3:-haiku}"
-ARMS="${ARMS:-control available required}"
+ARMS="${ARMS:-control thin available required}"
 DIR="$(cd "$(dirname "$0")" && pwd)"
 R=1
 while [ "$R" -le "$REPS" ]; do
