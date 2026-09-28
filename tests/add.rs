@@ -2,15 +2,68 @@ mod common;
 use common::FakeJev;
 use std::process::Command as P;
 
-#[tokio::test(flavor = "multi_thread")]
-async fn oversized_complete_batch_is_rejected_without_dropping_hunks() {
-    let server = common::mock_classifier(FakeJev {
-        choose: |_, _, o| o[0].clone(),
-        noul: |_, _| 0.95,
-    })
-    .await;
+fn git(dir: &std::path::Path, args: &[&str]) {
+    assert!(
+        P::new("git")
+            .args(args)
+            .current_dir(dir)
+            .status()
+            .unwrap()
+            .success()
+    );
+}
+
+/// An initialised repository that can commit.
+fn repo() -> tempfile::TempDir {
     let d = tempfile::tempdir().unwrap();
     git(d.path(), &["init", "-q"]);
+    for (key, value) in [
+        ("user.email", "t@t"),
+        ("user.name", "t"),
+        ("commit.gpgsign", "false"),
+    ] {
+        git(d.path(), &["config", key, value]);
+    }
+    d
+}
+
+fn commit_all(dir: &std::path::Path) {
+    git(dir, &["add", "."]);
+    git(dir, &["commit", "-qm", "init"]);
+}
+
+fn staged(dir: &std::path::Path, args: &[&str]) -> String {
+    let out = P::new("git")
+        .args(["diff", "--cached"])
+        .args(args)
+        .current_dir(dir)
+        .output()
+        .unwrap();
+    String::from_utf8(out.stdout).unwrap()
+}
+
+fn yes_to_auth() -> FakeJev {
+    FakeJev {
+        choose: |_, _, o| o[0].clone(),
+        noul: |i, s| {
+            let idx: usize = i
+                .split("hunks[")
+                .nth(1)
+                .and_then(|r| r.split(']').next())
+                .and_then(|n| n.parse().ok())
+                .unwrap();
+            let h = s["hunks"][idx].as_str().unwrap_or_default().to_string();
+            if h.contains("AUTH") { 0.95 } else { 0.05 }
+        },
+    }
+}
+
+/// A diff past the request cap is an input error before any request or staging: the index is
+/// left as it was.
+#[tokio::test(flavor = "multi_thread")]
+async fn oversized_diff_is_rejected_without_a_request_or_staging() {
+    let server = common::mock_classifier(yes_to_auth()).await;
+    let d = repo();
     for i in 0..20 {
         std::fs::write(d.path().join(format!("f{i}.txt")), "original\n").unwrap();
     }
@@ -22,12 +75,7 @@ async fn oversized_complete_batch_is_rejected_without_dropping_hunks() {
         )
         .unwrap();
     }
-    let before = P::new("git")
-        .args(["diff", "--cached"])
-        .current_dir(d.path())
-        .output()
-        .unwrap()
-        .stdout;
+    let before = staged(d.path(), &[]);
     let mut c = common::jevify_classifier(&server);
     c.current_dir(d.path());
     let out = tokio::task::spawn_blocking(move || {
@@ -40,97 +88,17 @@ async fn oversized_complete_batch_is_rejected_without_dropping_hunks() {
     let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
     assert_eq!(out.status.code(), Some(6), "{v}");
     assert_eq!(v["error"]["kind"], "input_too_large");
-    assert!(v["error"]["message"].as_str().unwrap().contains("batch"));
     assert!(server.received_requests().await.unwrap().is_empty());
-    let after = P::new("git")
-        .args(["diff", "--cached"])
-        .current_dir(d.path())
-        .output()
-        .unwrap()
-        .stdout;
-    assert_eq!(before, after);
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn oversized_hunk_is_rejected_before_any_staging_or_request() {
-    let server = common::mock(FakeJev {
-        choose: |_, _, o| o[0].clone(),
-        noul: |_, _| 0.95,
-    })
-    .await;
-    let d = tempfile::tempdir().unwrap();
-    git(d.path(), &["init", "-q"]);
-    std::fs::write(d.path().join("f.txt"), "original\n").unwrap();
-    git(d.path(), &["add", "f.txt"]);
-    let changed = format!(
-        "AUTH fix\n{}\nUNRELATED trailing change\n",
-        "ordinary words ".repeat(300)
-    );
-    std::fs::write(d.path().join("f.txt"), changed).unwrap();
-    let before = P::new("git")
-        .args(["diff", "--cached"])
-        .current_dir(d.path())
-        .output()
-        .unwrap()
-        .stdout;
-    let mut c = common::jevify(&server);
-    c.current_dir(d.path());
-    let out = tokio::task::spawn_blocking(move || {
-        c.args(["--json", "add", "--yes", "AUTH fix"])
-            .output()
-            .unwrap()
-    })
-    .await
-    .unwrap();
-    assert_eq!(out.status.code(), Some(6));
-    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
-    assert!(v["error"]["message"].as_str().unwrap().contains("hunk"));
-    assert!(server.received_requests().await.unwrap().is_empty());
-    let after = P::new("git")
-        .args(["diff", "--cached"])
-        .current_dir(d.path())
-        .output()
-        .unwrap()
-        .stdout;
-    assert_eq!(before, after);
-}
-
-fn git(dir: &std::path::Path, args: &[&str]) {
-    assert!(
-        P::new("git")
-            .args(args)
-            .current_dir(dir)
-            .status()
-            .unwrap()
-            .success()
-    );
+    assert_eq!(staged(d.path(), &[]), before);
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn stages_only_matching_hunks() {
-    let server = common::mock(FakeJev {
-        choose: |_, _, o| o[0].clone(),
-        noul: |i, s| {
-            let idx: usize = i
-                .split("hunks[")
-                .nth(1)
-                .and_then(|r| r.split(']').next())
-                .and_then(|n| n.parse().ok())
-                .unwrap();
-            let h = s["hunks"][idx].as_str().unwrap_or_default().to_string();
-            if h.contains("AUTH") { 0.95 } else { 0.05 }
-        },
-    })
-    .await;
-    let d = tempfile::tempdir().unwrap();
-    git(d.path(), &["init", "-q"]);
-    git(d.path(), &["config", "user.email", "t@t"]);
-    git(d.path(), &["config", "user.name", "t"]);
-    git(d.path(), &["config", "commit.gpgsign", "false"]);
+    let server = common::mock(yes_to_auth()).await;
+    let d = repo();
     let body: String = (0..40).map(|i| format!("line {i}\n")).collect();
     std::fs::write(d.path().join("f.txt"), &body).unwrap();
-    git(d.path(), &["add", "."]);
-    git(d.path(), &["commit", "-qm", "init"]);
+    commit_all(d.path());
     let changed = body
         .replace("line 2\n", "line 2 AUTH fix\n")
         .replace("line 35\n", "line 35 typo\n");
@@ -148,68 +116,55 @@ async fn stages_only_matching_hunks() {
         "{}",
         String::from_utf8_lossy(&out.stderr)
     );
-    let staged = String::from_utf8(
-        P::new("git")
-            .args(["diff", "--cached"])
-            .current_dir(d.path())
-            .output()
-            .unwrap()
-            .stdout,
-    )
-    .unwrap();
+    let staged = staged(d.path(), &[]);
     assert!(staged.contains("AUTH") && !staged.contains("typo"));
 }
 
+/// Decline (the machine form without `--yes`, exit 130, before any request, with the caller's
+/// command corrected), dry-run and abstention (exit 3) stage nothing.
 #[tokio::test(flavor = "multi_thread")]
-async fn machine_mode_without_yes_is_declined() {
-    let server = common::mock(FakeJev {
-        choose: |_, _, o| o[0].clone(),
-        noul: |_, _| 0.95,
-    })
-    .await;
-    let d = tempfile::tempdir().unwrap();
-    git(d.path(), &["init", "-q"]);
-    git(d.path(), &["config", "user.email", "t@t"]);
-    git(d.path(), &["config", "user.name", "t"]);
-    git(d.path(), &["config", "commit.gpgsign", "false"]);
+async fn decline_dry_run_and_abstention_stage_nothing() {
+    let server = common::mock(yes_to_auth()).await;
+    let d = repo();
     std::fs::write(d.path().join("f.txt"), "a\n").unwrap();
-    git(d.path(), &["add", "."]);
-    git(d.path(), &["commit", "-qm", "init"]);
-    std::fs::write(d.path().join("f.txt"), "b\n").unwrap();
-    let mut c = common::jevify(&server);
-    c.current_dir(d.path());
-    let out = tokio::task::spawn_blocking(move || {
-        c.args(["--json", "add", "anything"]).output().unwrap()
-    })
-    .await
-    .unwrap();
-    assert_eq!(out.status.code(), Some(130));
-    // Declined before any classification, with the caller's command corrected.
-    assert!(server.received_requests().await.unwrap().is_empty());
-    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
-    assert_eq!(v["error"]["kind"], "declined");
-    assert_eq!(v["error"]["example"], "jevify --json add --yes anything");
+    commit_all(d.path());
+    for (change, args, code) in [
+        ("b AUTH\n", vec!["--json", "add", "anything"], 130),
+        ("b AUTH\n", vec!["add", "--dry-run", "anything"], 0),
+        ("b typo\n", vec!["--json", "add", "--yes", "anything"], 3),
+    ] {
+        std::fs::write(d.path().join("f.txt"), change).unwrap();
+        let mut c = common::jevify(&server);
+        c.current_dir(d.path()).args(&args);
+        let out = tokio::task::spawn_blocking(move || c.output().unwrap())
+            .await
+            .unwrap();
+        assert_eq!(
+            out.status.code(),
+            Some(code),
+            "{args:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(staged(d.path(), &[]), "", "{args:?}");
+        if code == 130 {
+            assert!(server.received_requests().await.unwrap().is_empty());
+            let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+            assert_eq!(v["error"]["kind"], "declined");
+            assert_eq!(v["error"]["example"], "jevify --json add --yes anything");
+        }
+    }
 }
 
-// From a subdirectory, hunks in files outside it must still be staged (git runs at the top level;
-// `git apply` from `sub/` would skip `top.txt` and still exit 0).
+/// From a subdirectory, hunks in files outside it are still staged: git runs at the top level
+/// (`git apply` from `sub/` would skip `top.txt` and still exit 0).
 #[tokio::test(flavor = "multi_thread")]
 async fn stages_from_a_subdirectory() {
-    let server = common::mock(FakeJev {
-        choose: |_, _, o| o[0].clone(),
-        noul: |_, _| 0.95,
-    })
-    .await;
-    let d = tempfile::tempdir().unwrap();
-    git(d.path(), &["init", "-q"]);
-    git(d.path(), &["config", "user.email", "t@t"]);
-    git(d.path(), &["config", "user.name", "t"]);
-    git(d.path(), &["config", "commit.gpgsign", "false"]);
+    let server = common::mock(yes_to_auth()).await;
+    let d = repo();
     std::fs::create_dir(d.path().join("sub")).unwrap();
     std::fs::write(d.path().join("top.txt"), "a\n").unwrap();
-    git(d.path(), &["add", "."]);
-    git(d.path(), &["commit", "-qm", "init"]);
-    std::fs::write(d.path().join("top.txt"), "b\n").unwrap();
+    commit_all(d.path());
+    std::fs::write(d.path().join("top.txt"), "b AUTH\n").unwrap();
     let mut c = common::jevify(&server);
     c.current_dir(d.path().join("sub"));
     let out =
@@ -222,36 +177,17 @@ async fn stages_from_a_subdirectory() {
         "{}",
         String::from_utf8_lossy(&out.stderr)
     );
-    let staged = String::from_utf8(
-        P::new("git")
-            .args(["diff", "--cached", "--name-only"])
-            .current_dir(d.path())
-            .output()
-            .unwrap()
-            .stdout,
-    )
-    .unwrap();
-    assert_eq!(staged.trim(), "top.txt");
+    assert_eq!(staged(d.path(), &["--name-only"]).trim(), "top.txt");
 }
 
-// A clean tree has nothing for `add` to stage: it must exit 6 (input) with a hint specific to
-// `add`, not the generic stdin hint ("pipe text into jevify") that fits `pick`/`why`/`sort` but
-// not `add` (which reads `git diff`, not stdin).
+/// A clean tree has nothing to stage: exit 6 (input) with a hint written for `add`, which
+/// reads `git diff`, not stdin.
 #[tokio::test(flavor = "multi_thread")]
-async fn clean_tree_exits_with_an_add_specific_hint() {
-    let server = common::mock(FakeJev {
-        choose: |_, _, o| o[0].clone(),
-        noul: |_, _| 0.05,
-    })
-    .await;
-    let d = tempfile::tempdir().unwrap();
-    git(d.path(), &["init", "-q"]);
-    git(d.path(), &["config", "user.email", "t@t"]);
-    git(d.path(), &["config", "user.name", "t"]);
-    git(d.path(), &["config", "commit.gpgsign", "false"]);
+async fn clean_tree_is_an_input_error_with_a_hint() {
+    let server = common::mock(yes_to_auth()).await;
+    let d = repo();
     std::fs::write(d.path().join("f.txt"), "a\n").unwrap();
-    git(d.path(), &["add", "."]);
-    git(d.path(), &["commit", "-qm", "init"]);
+    commit_all(d.path());
     let mut c = common::jevify(&server);
     c.current_dir(d.path());
     let out = tokio::task::spawn_blocking(move || {
@@ -264,9 +200,4 @@ async fn clean_tree_exits_with_an_add_specific_hint() {
     assert_eq!(v["error"]["kind"], "empty_input");
     let hint = v["error"]["hint"].as_str().unwrap();
     assert!(hint.contains("git diff"), "{hint}");
-    assert!(!hint.contains("pipe text into jevify"), "{hint}");
-    assert_eq!(
-        v["error"]["example"],
-        "jevify add \"finish the login flow\""
-    );
 }

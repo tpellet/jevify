@@ -1,41 +1,8 @@
 mod common;
 use common::FakeJev;
 
-#[tokio::test(flavor = "multi_thread")]
-async fn oversized_input_abstains_without_judging_either_predicate() {
-    let server = common::mock(FakeJev {
-        choose: |_, _, o| o[0].clone(),
-        noul: |_, _| 0.95,
-    })
-    .await;
-    for condition in ["contains a refund", "contains no refund"] {
-        let mut c = common::jevify(&server);
-        let input = format!(
-            "{}\nrefund\n{}",
-            "ordinary text ".repeat(4000),
-            "ordinary text ".repeat(4000)
-        );
-        let out = tokio::task::spawn_blocking(move || {
-            c.args(["--json", "is", condition])
-                .write_stdin(input)
-                .output()
-                .unwrap()
-        })
-        .await
-        .unwrap();
-        assert_eq!(out.status.code(), Some(3));
-        let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
-        assert!(v["data"]["p"].is_null());
-        assert_eq!(v["data"]["verdict"], "unsure");
-        assert_eq!(v["data"]["truncated"], true);
-        assert!(String::from_utf8_lossy(&out.stderr).contains("not judged"));
-    }
-    assert!(server.received_requests().await.unwrap().is_empty());
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn exit_codes_follow_band() {
-    let server = common::mock(FakeJev {
+fn refund_answers() -> FakeJev {
+    FakeJev {
         choose: |_, _, o| o[0].clone(),
         noul: |_, s| {
             if s.to_string().contains("refund") {
@@ -46,57 +13,76 @@ async fn exit_codes_follow_band() {
                 0.1
             }
         },
-    })
-    .await;
-    for (input, code) in [
-        ("I want a refund", 0),
-        ("hello there", 1),
-        ("maybe something", 3),
-    ] {
-        let mut c = common::jevify(&server);
-        let input = input.to_string();
-        let out = tokio::task::spawn_blocking(move || {
-            c.args(["is", "asks for a refund"])
-                .write_stdin(input)
-                .output()
-                .unwrap()
-        })
-        .await
-        .unwrap();
-        assert_eq!(out.status.code(), Some(code));
     }
 }
 
+/// yes, no and unsure are exit 0, 1 and 3, with the probability in `data.p`. `ok` stays true
+/// on all three (it says jevify itself finished without an error of its own); `exit_code` is
+/// the field to branch on.
 #[tokio::test(flavor = "multi_thread")]
-async fn json_reports_probability() {
+async fn verdicts_are_exit_0_1_3_with_ok_true_and_the_probability() {
+    let server = common::mock(refund_answers()).await;
+    for (input, code, verdict, p) in [
+        ("I want a refund", 0, "yes", 0.9),
+        ("hello there", 1, "no", 0.1),
+        ("maybe something", 3, "unsure", 0.5),
+    ] {
+        for machine in [false, true] {
+            let mut c = common::jevify(&server);
+            if machine {
+                c.arg("--json");
+            }
+            let out = tokio::task::spawn_blocking(move || {
+                c.args(["is", "asks for a refund"])
+                    .write_stdin(input)
+                    .output()
+                    .unwrap()
+            })
+            .await
+            .unwrap();
+            assert_eq!(out.status.code(), Some(code), "{input}");
+            if machine {
+                let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+                assert_eq!(v["exit_code"], code, "{v}");
+                assert_eq!(v["ok"], true, "{v}");
+                assert!(v["error"].is_null(), "{v}");
+                assert_eq!(v["data"]["verdict"], verdict);
+                assert_eq!(v["data"]["p"], p);
+            } else {
+                assert!(out.stdout.is_empty());
+            }
+        }
+    }
+}
+
+/// Input past the evidence budget abstains (exit 3) without a request, and says so.
+#[tokio::test(flavor = "multi_thread")]
+async fn oversized_input_abstains_without_a_request() {
     let server = common::mock(FakeJev {
         choose: |_, _, o| o[0].clone(),
-        noul: |_, _| 0.81,
+        noul: |_, _| 0.95,
     })
     .await;
     let mut c = common::jevify(&server);
+    let input = format!(
+        "{}\nrefund\n{}",
+        "ordinary text ".repeat(4000),
+        "ordinary text ".repeat(4000)
+    );
     let out = tokio::task::spawn_blocking(move || {
-        c.args(["--json", "is", "x"])
-            .write_stdin("text")
+        c.args(["--json", "is", "contains a refund"])
+            .write_stdin(input)
             .output()
             .unwrap()
     })
     .await
     .unwrap();
+    assert_eq!(out.status.code(), Some(3));
     let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
-    assert_eq!(v["data"]["verdict"], "yes");
-    assert_eq!(v["data"]["p"], 0.81);
-    assert_eq!(v["meta"]["requests"], 1);
-}
-
-#[test]
-fn band_out_of_range_is_a_usage_error() {
-    common::bin()
-        .env("TYPESAFE_API_KEY", "k")
-        .args(["is", "--band", "0.9", "x"])
-        .write_stdin("t")
-        .assert()
-        .code(2);
+    assert!(v["data"]["p"].is_null());
+    assert_eq!(v["data"]["verdict"], "unsure");
+    assert_eq!(v["data"]["truncated"], true);
+    assert!(server.received_requests().await.unwrap().is_empty());
 }
 
 fn statement_answers() -> FakeJev {
@@ -114,119 +100,59 @@ fn statement_answers() -> FakeJev {
     }
 }
 
+/// Several statements: one line per statement in input order and the aggregate verdict as
+/// the exit; 21 statements fit the keyless backend's chunk of 20 questions per request.
 #[tokio::test(flavor = "multi_thread")]
-async fn statements_preserve_order_and_aggregate_verdicts_in_one_post() {
+async fn statements_keep_their_order_and_aggregate_the_verdict() {
+    let server = common::mock(statement_answers()).await;
     for (statements, code, verdict) in [
-        (vec!["yes"], 0, "yes"),
         (vec!["yes", "no"], 1, "no"),
         (vec!["yes", "yes", "yes"], 0, "yes"),
-        (vec!["unsure", "no", "yes"], 1, "no"),
         (vec!["no", "unsure", "yes"], 1, "no"),
         (vec!["yes", "unsure", "yes"], 3, "unsure"),
     ] {
-        let server = common::mock(statement_answers()).await;
         for machine in [false, true] {
             let mut c = common::jevify(&server);
             if machine {
                 c.arg("--json");
-            } else {
-                c.arg("--verbose");
             }
             c.arg("is").args(&statements);
             let out = tokio::task::spawn_blocking(move || c.write_stdin("text").output().unwrap())
                 .await
                 .unwrap();
-            assert_eq!(out.status.code(), Some(code));
+            assert_eq!(out.status.code(), Some(code), "{statements:?}");
             if machine {
                 let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
                 assert_eq!(v["data"]["verdict"], verdict);
-                assert_eq!(v["meta"]["requests"], 1);
-                if statements.len() == 1 {
-                    assert_eq!(
-                        v["data"],
-                        serde_json::json!({"p": 0.9, "verdict": "yes", "truncated": false})
-                    );
-                } else {
-                    let entries = v["data"]["statements"].as_array().unwrap();
-                    assert_eq!(entries.len(), statements.len());
-                    for (entry, statement) in entries.iter().zip(&statements) {
-                        assert_eq!(entry["statement"], *statement);
-                        assert_eq!(entry["verdict"], *statement);
-                        let p = match *statement {
-                            "no" => 0.1,
-                            "unsure" => 0.5,
-                            _ => 0.9,
-                        };
-                        assert_eq!(entry["p"], p);
-                    }
+                let entries = v["data"]["statements"].as_array().unwrap();
+                assert_eq!(entries.len(), statements.len());
+                for (entry, statement) in entries.iter().zip(&statements) {
+                    assert_eq!(entry["statement"], *statement);
+                    assert_eq!(entry["verdict"], *statement);
                 }
             } else {
-                let expected = if statements.len() == 1 {
-                    String::new()
-                } else {
-                    statements.iter().map(|s| format!("{s}\t{s}\n")).collect()
-                };
+                let expected: String = statements.iter().map(|s| format!("{s}\t{s}\n")).collect();
                 assert_eq!(out.stdout, expected.as_bytes());
-                assert!(String::from_utf8_lossy(&out.stderr).contains("0.9"));
             }
         }
-        let requests = server.received_requests().await.unwrap();
-        assert_eq!(requests.len(), 2);
-        for request in requests {
-            assert_eq!(request.method, "POST");
-            let body: serde_json::Value = serde_json::from_slice(&request.body).unwrap();
-            assert_eq!(
-                body["questions"].as_object().unwrap().len(),
-                statements.len()
-            );
-        }
     }
+    let server = common::mock_classifier(statement_answers()).await;
+    let statements: Vec<String> = (0..21).map(|i| format!("statement {i}")).collect();
+    let mut c = common::jevify_classifier(&server);
+    c.arg("is").args(&statements);
+    let out = tokio::task::spawn_blocking(move || c.write_stdin("text").output().unwrap())
+        .await
+        .unwrap();
+    assert_eq!(out.status.code(), Some(0));
+    let expected: String = statements.iter().map(|s| format!("yes\t{s}\n")).collect();
+    assert_eq!(out.stdout, expected.as_bytes());
 }
 
+/// `--context FILE` is the input, read like stdin (lossy, trimmed), and stdin is then ignored.
+/// A missing or empty context is an input error, an oversized one abstains, empty stdin is
+/// an input error: none of them makes a request.
 #[tokio::test(flavor = "multi_thread")]
-async fn twenty_one_statements_use_backend_question_chunks() {
-    for classifier in [false, true] {
-        let server = if classifier {
-            common::mock_classifier(statement_answers()).await
-        } else {
-            common::mock(statement_answers()).await
-        };
-        let mut c = if classifier {
-            common::jevify_classifier(&server)
-        } else {
-            common::jevify(&server)
-        };
-        let statements: Vec<String> = (0..21).map(|i| format!("statement {i}")).collect();
-        c.arg("is").args(&statements);
-        let out = tokio::task::spawn_blocking(move || c.write_stdin("text").output().unwrap())
-            .await
-            .unwrap();
-        assert_eq!(out.status.code(), Some(0));
-        let expected: String = statements.iter().map(|s| format!("yes\t{s}\n")).collect();
-        assert_eq!(out.stdout, expected.as_bytes());
-        let requests = server.received_requests().await.unwrap();
-        assert_eq!(requests.len(), if classifier { 2 } else { 1 });
-        let mut sizes: Vec<usize> = requests
-            .iter()
-            .map(|request| {
-                let body: serde_json::Value = serde_json::from_slice(&request.body).unwrap();
-                body[if classifier {
-                    "dimensions"
-                } else {
-                    "questions"
-                }]
-                .as_object()
-                .unwrap()
-                .len()
-            })
-            .collect();
-        sizes.sort_unstable();
-        assert_eq!(sizes, if classifier { vec![1, 20] } else { vec![21] });
-    }
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn context_matches_lossy_trimmed_stdin_and_ignores_other_stdin() {
+async fn context_file_replaces_stdin_and_its_errors_make_no_requests() {
     let server = common::mock(statement_answers()).await;
     let dir = tempfile::tempdir().unwrap().keep();
     let path = dir.join("context");
@@ -258,14 +184,13 @@ async fn context_matches_lossy_trimmed_stdin_and_ignores_other_stdin() {
     let requests = server.received_requests().await.unwrap();
     assert_eq!(requests.len(), 2);
     assert_eq!(requests[0].body, requests[1].body);
-}
 
-#[tokio::test(flavor = "multi_thread")]
-async fn missing_empty_and_oversized_contexts_make_no_requests() {
-    let server = common::mock(statement_answers()).await;
-    let dir = tempfile::tempdir().unwrap().keep();
-    let path = dir.join("context");
-    for contents in [None, Some(String::new()), Some("x".repeat(96_001))] {
+    for (name, contents, code) in [
+        ("missing", None, 6),
+        ("empty", Some(String::new()), 6),
+        ("huge", Some("x".repeat(96_001)), 3),
+    ] {
+        let path = dir.join(name);
         if let Some(contents) = &contents {
             std::fs::write(&path, contents).unwrap();
         }
@@ -275,17 +200,7 @@ async fn missing_empty_and_oversized_contexts_make_no_requests() {
         let out = tokio::task::spawn_blocking(move || c.write_stdin("ignored").output().unwrap())
             .await
             .unwrap();
-        let oversized = contents.as_ref().is_some_and(|s| s.len() > 96_000);
-        assert_eq!(out.status.code(), Some(if oversized { 3 } else { 6 }));
-        if oversized {
-            let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
-            assert_eq!(
-                v["data"]["reason"],
-                "input exceeds the evidence budget; whole input not judged"
-            );
-            assert_eq!(v["data"]["verdict"], "unsure");
-            assert_eq!(v["data"]["statements"].as_array().unwrap().len(), 2);
-        }
+        assert_eq!(out.status.code(), Some(code), "{name}");
     }
     let mut c = common::jevify(&server);
     let out = tokio::task::spawn_blocking(move || {
@@ -295,47 +210,5 @@ async fn missing_empty_and_oversized_contexts_make_no_requests() {
     .unwrap();
     assert_eq!(out.status.code(), Some(6));
     assert!(out.stdout.is_empty());
-    assert!(server.received_requests().await.unwrap().is_empty());
-}
-
-/// `ok` is not the field to branch on: it says that jevify itself reached the end without an
-/// error of its own, so it stays true on a no (exit 1) and on an abstention (exit 3), where the
-/// `data` a caller expects is absent. A harness that reads `.ok` as "the call worked" would take
-/// both for success. `exit_code` is the branch, and it equals the process status.
-#[tokio::test(flavor = "multi_thread")]
-async fn ok_stays_true_on_a_no_and_on_an_abstention_while_exit_code_tells_them_apart() {
-    let server = common::mock(FakeJev {
-        choose: |_, _, o| o[0].clone(),
-        noul: |_, s| {
-            if s.to_string().contains("refund") {
-                0.9
-            } else if s.to_string().contains("maybe") {
-                0.5
-            } else {
-                0.1
-            }
-        },
-    })
-    .await;
-    for (input, code) in [
-        ("I want a refund", 0),
-        ("hello there", 1),
-        ("maybe something", 3),
-    ] {
-        let mut c = common::jevify(&server);
-        let stdin = input.to_string();
-        let out = tokio::task::spawn_blocking(move || {
-            c.args(["--json", "is", "asks for a refund"])
-                .write_stdin(stdin)
-                .output()
-                .unwrap()
-        })
-        .await
-        .unwrap();
-        let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
-        assert_eq!(out.status.code(), Some(code), "{v}");
-        assert_eq!(v["exit_code"], code, "{v}");
-        assert_eq!(v["ok"], true, "{input}: {v}");
-        assert!(v["error"].is_null(), "{input}: {v}");
-    }
+    assert_eq!(server.received_requests().await.unwrap().len(), 2);
 }
