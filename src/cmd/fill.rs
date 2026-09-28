@@ -215,6 +215,7 @@ async fn resolve(
             state.records = listing.records.clone();
             state.omitted = listing.omitted;
             state.total = listing.total;
+            state.scope_hint = listing.scope_hint.clone();
             state.newest = listing.ordered && listing.total > listing.records.len();
             if m.opens_argument && !kind.path_kind {
                 state.records.retain(|r| {
@@ -520,6 +521,7 @@ struct State {
     omitted: usize,
     /// An ordered listing above the limit kept its newest part.
     newest: bool,
+    scope_hint: Option<String>,
     /// Finalists whose excerpt the withholding policy kept out of round two.
     withheld: usize,
     handle: Option<OsString>,
@@ -608,12 +610,11 @@ fn apply_ranking(state: &mut State, ranking: &Ranking, threshold: f64) {
             state.handle = Some(record.handle.clone());
             state.p = Some(best.p);
             state.detail = format!(
-                "{} {:.2} (next {:.2}, none {:.2}) {}; {}, windows {}{}",
+                "{} {:.2} (next {:.2}, none {:.2}); {}, windows {}{}",
                 record.handle.to_string_lossy(),
                 best.p,
                 ranking.candidates.get(1).map_or(0.0, |c| c.p),
                 ranking.none,
-                record.evidence,
                 state.count_line(),
                 ranking.windows,
                 if state.withheld > 0 {
@@ -826,9 +827,12 @@ fn finish(
     }
     let model = ctx.meta().model.unwrap_or_else(|| "not requested".into());
     for (m, state) in markers.iter().zip(&states) {
+        let scope = state.scope_hint.as_ref().map_or(String::new(), |hint| {
+            format!("; {}", output::status_escape(hint))
+        });
         if state.reason.is_none() && !flags.quiet {
             eprintln!(
-                "jevify fill: {} {}; model {}",
+                "jevify fill: {} {}; model {}{scope}",
                 m.kind,
                 output::status_escape(&state.detail),
                 output::status_escape(&model)
@@ -837,6 +841,9 @@ fn finish(
     }
     for (m, state) in markers.iter().zip(&states) {
         if let Some(reason) = state.reason {
+            let scope = state.scope_hint.as_ref().map_or(String::new(), |hint| {
+                format!("; {}", output::status_escape(hint))
+            });
             let detail = if state.detail.is_empty() {
                 String::new()
             } else {
@@ -848,7 +855,7 @@ fn finish(
                 format!("; hint: {}", abstention_hint(reason))
             };
             eprintln!(
-                "jevify fill: not run: arg {} {}: {reason}; {detail}candidates {} of {}, omitted {}; model {}{hint}",
+                "jevify fill: not run: arg {} {}: {reason}; {detail}candidates {} of {}, omitted {}; model {}{hint}{scope}",
                 m.argv_index + 1,
                 m.kind,
                 state.records.len(),

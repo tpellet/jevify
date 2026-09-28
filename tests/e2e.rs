@@ -41,6 +41,8 @@ use std::time::{Duration, Instant};
 
 const HYPERFINE: &str = "https://github.com/sharkdp/hyperfine";
 const PIN: &str = "f12f3d9f86f3643b3b7deace5e160b1f0f44d2b7";
+const RIPGREP_PIN: &str = "3fce3b5bb0236da2df6d99672afb8a719642eca7";
+const BAT_PIN: &str = "4987f76709aae3a1c4db723c53874c9ddcb0c4fd";
 
 /// Where a case runs.
 #[derive(Clone, Copy)]
@@ -49,6 +51,8 @@ enum At {
     Repo,
     /// The pinned hyperfine clone.
     Hyperfine,
+    Ripgrep,
+    Bat,
     /// A second hyperfine clone with ergonomics task `ad1`'s two unrelated, unstaged edits.
     Edited,
     /// The repository whose commit subjects lie.
@@ -84,6 +88,8 @@ enum Expect {
     No,
     /// Exit 3 and nothing chosen; without `--json` nothing on stdout; for `fill`, nothing ran.
     Nothing,
+    /// Exit 3, or exit 0 choosing an item other than this known false positive.
+    Not(&'static str),
     /// `fill` ran the command with these handles, and the exit code is the command's own.
     Ran {
         code: i32,
@@ -146,6 +152,13 @@ fn cases() -> Vec<Case> {
         c("why-clean-tokio", Repo, File("evals/validation/inputs/why/ok-tokio-rs-tokio-32519536561.log"), &["why"], Nothing),
 
         // fill: the handle a command needs, from a description; --dry-run resolves, runs nothing.
+        c("fill-bat-pr", Bat, Empty, &["fill", "--dry-run", "--json", "--", "gh", "pr", "checkout",
+            "@{pr:keeps the grid aligned when a tab follows a multibyte character}"], Chose(&["4018"])),
+        c("fill-ripgrep-commit", Ripgrep, Empty, &["fill", "--dry-run", "--json", "--", "git", "revert",
+            "@{commit:stops idle search workers spinning forever when a visitor unwinds}"], Chose(&["0d7054d"])),
+        // The certbot file maps INI syntax; it does not renew certificates.
+        c("pick-certbot-negative", Bat, Empty, &["pick", "--json", "--from", "file",
+            "renews TLS certificates for an HTTPS server"], Not("src/syntax_mapping/builtins/unix-family/50-certbot.toml")),
         c("fl1", Hyperfine, Empty, &["fill", "--dry-run", "--json", "--", "git", "show", "--stat",
             "@{commit:the commit that repaired how per-command names were applied when benchmarking over a range of parameter values}"], Chose(&["835fc43"])),
         c("fl2", Hyperfine, Empty, &["fill", "--dry-run", "--json", "--", "head", "-n", "10",
@@ -261,6 +274,8 @@ struct Ctx {
     tmp: PathBuf,
     repo: PathBuf,
     hyperfine: PathBuf,
+    ripgrep: PathBuf,
+    bat: PathBuf,
     edited: PathBuf,
     liars: PathBuf,
     data: PathBuf,
@@ -297,25 +312,38 @@ fn setup(command: &mut Command) {
     );
 }
 
+fn pinned_clone(tmp: &Path, url: &str, name: &str, pin: &str) -> PathBuf {
+    let dir = tmp.join(name);
+    if !dir.exists() {
+        git(tmp, &["clone", "--quiet", "--revision", pin, url, name]).unwrap();
+    }
+    assert_eq!(git(&dir, &["rev-parse", "HEAD"]).unwrap().trim(), pin);
+    dir
+}
+
 impl Ctx {
     fn prepare() -> Self {
         let tmp = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
         let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let hyperfine = tmp.join("e2e-hyperfine-f12f3d9");
-        if !hyperfine.join(".git").is_dir() {
-            git(
-                &tmp,
-                &["clone", "--quiet", HYPERFINE, "e2e-hyperfine-f12f3d9"],
-            )
-            .unwrap();
-        }
+        let hyperfine = pinned_clone(&tmp, HYPERFINE, "e2e-hyperfine-f12f3d9", PIN);
+        let ripgrep = pinned_clone(
+            &tmp,
+            "https://github.com/BurntSushi/ripgrep",
+            "e2e-ripgrep-3fce3b5",
+            RIPGREP_PIN,
+        );
+        let bat = pinned_clone(
+            &tmp,
+            "https://github.com/sharkdp/bat",
+            "e2e-bat-4987f76",
+            BAT_PIN,
+        );
         let filter = ["config", "--get", "remote.origin.partialclonefilter"];
         assert!(
             git(&hyperfine, &filter).is_err(),
             "{} is a partial clone: commit evidence would fetch over the network",
             hyperfine.display()
         );
-        git(&hyperfine, &["checkout", "--quiet", "--detach", PIN]).unwrap();
         // The branch golds name a remote branch, which a reused clone may lack.
         let branch = "refs/remotes/origin/track-memory-usage";
         if git(&hyperfine, &["rev-parse", "--verify", "--quiet", branch]).is_err() {
@@ -323,16 +351,12 @@ impl Ctx {
             git(&hyperfine, &["fetch", "--quiet", "origin", refspec]).unwrap();
         }
 
-        let edited = tmp.join("e2e-hyperfine-f12f3d9-edited");
-        if !edited.join(".git").is_dir() {
-            let from = hyperfine.to_str().unwrap();
-            git(
-                &tmp,
-                &["clone", "--quiet", from, "e2e-hyperfine-f12f3d9-edited"],
-            )
-            .unwrap();
-        }
-        git(&edited, &["checkout", "--quiet", "--detach", PIN]).unwrap();
+        let edited = pinned_clone(
+            &tmp,
+            hyperfine.to_str().unwrap(),
+            "e2e-hyperfine-f12f3d9-edited",
+            PIN,
+        );
         // Task ad1's edits, written over the pinned content on every run: the installation
         // instructions, and an unrelated constant.
         let pinned = |path: &str| git(&edited, &["show", &format!("{PIN}:{path}")]).unwrap();
@@ -374,6 +398,8 @@ impl Ctx {
             tmp,
             repo,
             hyperfine,
+            ripgrep,
+            bat,
             edited,
             liars,
             data,
@@ -384,6 +410,8 @@ impl Ctx {
         match at {
             At::Repo => &self.repo,
             At::Hyperfine => &self.hyperfine,
+            At::Ripgrep => &self.ripgrep,
+            At::Bat => &self.bat,
             At::Edited => &self.edited,
             At::Liars => &self.liars,
             At::Data => &self.data,
@@ -594,6 +622,7 @@ fn check(case: &Case, run: &Run, backend: &str, ctx: &Ctx) -> Result<String, Str
     let want = match case.expect {
         Expect::No => 1,
         Expect::Nothing => 3,
+        Expect::Not(_) if run.code == Some(3) => 3,
         Expect::Ran { code, .. } => code,
         _ => 0,
     };
@@ -618,6 +647,16 @@ fn check(case: &Case, run: &Run, backend: &str, ctx: &Ctx) -> Result<String, Str
         names.len() == want.len() && names.iter().zip(want).all(|(g, w)| g.starts_with(w))
     };
     match &case.expect {
+        Expect::Not(forbidden) => {
+            if (want == 3 && !names.is_empty())
+                || (want == 0 && (names.len() != 1 || names.contains(forbidden)))
+            {
+                return Err(format!(
+                    "chose {names:?}, must abstain or avoid {forbidden}: {}",
+                    tail()
+                ));
+            }
+        }
         Expect::Chose(want) if !same(want) => {
             return Err(format!("chose {names:?}, want {want:?}: {}", tail()));
         }
@@ -740,6 +779,16 @@ fn run_suite(backend: &str) {
             continue;
         }
         let t = Instant::now();
+        if case.id == "fill-bat-pr"
+            && !Command::new("gh")
+                .args(["auth", "status", "--hostname", "github.com"])
+                .output()
+                .is_ok_and(|out| out.status.success())
+        {
+            eprintln!("SKIPPED {}: gh is unauthenticated", case.id);
+            skipped += 1;
+            continue;
+        }
         let run = ctx.run(&case, backend);
         let asked = run.envelope["meta"]["requests"].as_u64().unwrap_or(0);
         requests += asked;

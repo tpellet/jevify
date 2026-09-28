@@ -376,6 +376,7 @@ pub struct Listing {
     pub total: usize,
     pub omitted: usize,
     pub ordered: bool,
+    pub scope_hint: Option<String>,
 }
 
 #[derive(Clone)]
@@ -598,7 +599,7 @@ fn input_listing(
 fn recipe_listing(recipe: &Recipe, limit: usize, env: &Env) -> Result<Listing, JevifyError> {
     let argv: Vec<OsString> = recipe.list.iter().map(OsString::from).collect();
     let bytes = run_lister(&argv, env)?;
-    input_listing(
+    let mut listing = input_listing(
         &bytes,
         Split::Lines,
         recipe.field,
@@ -606,7 +607,21 @@ fn recipe_listing(recipe: &Recipe, limit: usize, env: &Env) -> Result<Listing, J
         recipe.ordered,
         limit,
     )
-    .map_err(|e| JevifyError::lister_failed(format!("{}: {e}", recipe.list[0])))
+    .map_err(|e| JevifyError::lister_failed(format!("{}: {e}", recipe.list[0])))?;
+    if recipe.ordered && shipped().contains(recipe) {
+        if let Some(index) = recipe.list.iter().position(|arg| arg == "--limit") {
+            if let Some(cap) = recipe.list.get(index + 1) {
+                let mut command = recipe.list.clone();
+                command[index + 1] = "N".into();
+                listing.scope_hint = Some(format!(
+                    "listing capped at newest {cap}; widen/narrow with {} [filters], then pipe to --key {} (fill: @{{-:description}})",
+                    command.join(" "),
+                    recipe.key.as_deref().unwrap_or("HANDLE")
+                ));
+            }
+        }
+    }
+    Ok(listing)
 }
 
 fn listing(mut records: Vec<Record>, mut omitted: usize, ordered: bool, limit: usize) -> Listing {
@@ -632,6 +647,7 @@ fn listing(mut records: Vec<Record>, mut omitted: usize, ordered: bool, limit: u
         total,
         omitted,
         ordered,
+        scope_hint: None,
     }
 }
 

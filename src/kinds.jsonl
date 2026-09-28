@@ -1,6 +1,6 @@
 {"kind":"pr","list":["gh","pr","list","--state","all","--limit","1000","--json","number,title,state,headRefName"],"key":"number","ordered":true}
-{"kind":"issue","list":["gh","issue","list","--state","all","--limit","1000","--json","number,title,state"],"key":"number","ordered":true}
-{"kind":"ci-run","list":["gh","run","list","--limit","1000","--json","databaseId,displayTitle,status,conclusion,headBranch"],"key":"databaseId","ordered":true}
+{"kind":"issue","list":["gh","issue","list","--state","all","--limit","200","--json","number,title,state"],"key":"number","ordered":true}
+{"kind":"ci-run","list":["gh","run","list","--limit","200","--json","databaseId,displayTitle,status,conclusion,headBranch"],"key":"databaseId","ordered":true}
 {"kind":"stash","list":["git","stash","list","--format=%gd%x09%gs"],"field":1,"ordered":true}
 {"kind":"process","list":["ps","-axo","pid=,comm=,args="],"field":1}
 {"kind":"container","list":["docker","ps","--format","{{.Names}}\t{{.Image}}\t{{.Status}}"],"field":1}

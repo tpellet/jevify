@@ -268,13 +268,16 @@ async fn from_kind(
         });
     }
     let windows = count.div_ceil(size);
+    let scope = listing.scope_hint.as_ref().map_or(String::new(), |hint| {
+        format!("; {}", crate::output::status_escape(hint))
+    });
     if listing.ordered && listing.total > count {
         eprintln!(
-            "jevify pick: candidates {count} of {}, newest first; windows {windows}",
+            "jevify pick: candidates {count} of {}, newest first; windows {windows}{scope}",
             listing.total
         );
     } else {
-        eprintln!("jevify pick: candidates {count}, windows {windows}");
+        eprintln!("jevify pick: candidates {count}, windows {windows}{scope}");
     }
     if n != 3 {
         eprintln!("jevify pick: finalists per window: {n}");

@@ -637,6 +637,40 @@ async fn recipes_come_from_the_config_directory_and_are_checked_before_any_work(
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn status_keeps_handles_and_scope_without_echoing_candidate_evidence() {
+    let server = common::mock(fake()).await;
+    let dir = tempfile::tempdir().unwrap().keep();
+    executable(
+        &dir.join("gh"),
+        "#!/bin/sh\nprintf '%s\\n' '[{\"number\":4018,\"title\":\"PRIVATE_EVIDENCE\"}]'\n",
+    );
+    for (args, input) in [
+        (
+            vec!["fill", "--dry-run", "--", "echo", "@{pr:x}"],
+            String::new(),
+        ),
+        (
+            vec!["fill", "--dry-run", "--field", "1", "--", "echo", "@{-:x}"],
+            format!("4018 {}\n", "PRIVATE_EVIDENCE".repeat(300)),
+        ),
+        (vec!["pick", "--from", "pr", "x"], String::new()),
+    ] {
+        let out = run(fixture_command(common::jevify(&server), &dir), &args, input);
+        assert_eq!(out.status.code(), Some(0), "{out:?}");
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(!stderr.contains("PRIVATE_EVIDENCE"), "{stderr}");
+        if args.contains(&"pr") || args.contains(&"@{pr:x}") {
+            assert!(
+                stderr.contains("capped")
+                    && stderr.contains("--limit N")
+                    && stderr.contains("--key number"),
+                "{stderr}"
+            );
+        }
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn a_commit_is_a_full_oid_and_a_long_history_keeps_the_newest() {
     let server = common::mock_classifier(fake()).await;
     let capacity = 99 * 33;
