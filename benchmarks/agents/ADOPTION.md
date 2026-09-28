@@ -366,11 +366,22 @@ USD; `E1-required-r1` reached the right one after 12 turns and 0.054 USD.
 4. A tool call that goes wrong is usually an argument-shape error, not a wrong
    judgment. Corrected 2026-09-28 after a recount of the call logs of the eight
    scored tasks: of 56 calls, 15 produced no judgment at all, 27 per cent — 7 exited
-   6, one exited 2, and 7 were killed at 128. The figure first published here, 7 of
-   49 exiting 6 or 2, counted only the two usage exits and took its denominator from
-   the arms rather than from the logs; it understated the rate by more than half. The
+   6, one exited 2, and 7 exited 128. The figure first published here, 7 of 49
+   exiting 6 or 2, counted only the two usage exits and took its denominator from the
+   arms rather than from the logs; it understated the rate by more than half. The
    remaining 41 calls judged: 26 answered, 15 abstained, and 3 of the answers were
    wrong. A reader should take the 27 per cent, not the original 14.
+
+   All fifteen are the tool's, not the harness's. The first label here called the
+   seven 128s a harness artefact; they are not. In every one of the seven, `fill`
+   chose the right branch and said so — `branch fix-319 0.96 … origin/fix-319` — and
+   then substituted the bare `fix-319` into a git subcommand that reads a revision
+   (`log`, `show`), where only the remote ref exists, so git exited 128 with an
+   ambiguous argument. The status line holds the qualified ref the command needed and
+   the argv holds the one it cannot resolve. Any fresh clone has remote-only branches,
+   so this is the ordinary case for an agent working in a repository it just cloned,
+   not an edge. Split by cause: 8 argument-shape errors and 7 of this branch-spelling
+   fault, both jevify's to fix.
 
 **Not supported.**
 
