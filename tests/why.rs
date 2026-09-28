@@ -1,6 +1,247 @@
 mod common;
 use common::{FakeJev, option_containing};
 
+#[tokio::test(flavor = "multi_thread")]
+async fn ci_evidence_is_clean_and_each_job_keeps_its_original_cause() {
+    let server = common::mock(FakeJev {
+        choose: |_, s, o| {
+            let evidence = s.to_string();
+            assert!(!evidence.contains("PRIVATE_JOB"));
+            assert!(!evidence.contains("PRIVATE_STEP"));
+            assert!(!evidence.contains("2026-09-28"));
+            assert!(!evidence.contains("\\u001b"));
+            assert!(!evidence.contains("^[["));
+            option_containing(s, o, "error: cause")
+        },
+        noul: |_, _| 0.95,
+    })
+    .await;
+    // Interleaved jobs with identical diagnostics must not deduplicate each other.
+    let a = "PRIVATE_JOB_A\tPRIVATE_STEP\t2026-09-28T10:00:00Z \x1b[31merror: cause\x1b[0m  ";
+    let b = "PRIVATE_JOB_B\tPRIVATE_STEP\t2026-09-28T10:00:00Z ^[[31merror: cause^[[0m  ";
+    let log = format!(
+        "{a}\n{b}\nPRIVATE_JOB_A\tPRIVATE_STEP\t\tcontinued detail\nPRIVATE_JOB_A\tPRIVATE_STEP\t2026-09-28T10:00:01Z Process completed with exit code 1\n"
+    );
+    for json in [true, false] {
+        let mut cmd = common::jevify(&server);
+        cmd.args(["why", "--no-save", "-C", "0"]);
+        if json {
+            cmd.arg("--json");
+        }
+        let input = log.clone();
+        let out = tokio::task::spawn_blocking(move || cmd.write_stdin(input).output().unwrap())
+            .await
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        if json {
+            let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+            let causes = v["data"]["causes"].as_array().unwrap();
+            assert_eq!(causes.len(), 2);
+            assert_eq!(causes[0]["line"], 1);
+            assert_eq!(causes[0]["text"], a);
+            assert_eq!(causes[1]["line"], 2);
+            assert_eq!(causes[1]["text"], b);
+        } else {
+            let stdout = String::from_utf8(out.stdout).unwrap();
+            assert!(stdout.contains(a) && stdout.contains(b));
+            assert!(stdout.find(a) < stdout.find(b));
+        }
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn summary_includes_the_first_shortlisted_diagnostic_block() {
+    let server = common::mock(FakeJev {
+        choose: |_, s, o| option_containing(s, o, "Found 2 not formatted files"),
+        noul: |_, _| 0.95,
+    })
+    .await;
+    let mut cmd = common::jevify(&server);
+    let out = tokio::task::spawn_blocking(move || {
+        cmd.args(["--json", "why", "--no-save", "-C", "0"])
+            .write_stdin(
+                "from src/main.ts:\n  1|+ formatted text\n\nFound 2 not formatted files.\n",
+            )
+            .output()
+            .unwrap()
+    })
+    .await
+    .unwrap();
+    assert!(out.status.success());
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v["data"]["causes"][0]["line"], 4);
+    let context = v["data"]["causes"][0]["context"].as_array().unwrap();
+    assert_eq!(
+        context
+            .iter()
+            .map(|l| l["line"].as_u64().unwrap())
+            .collect::<Vec<_>>(),
+        [1, 2, 4]
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn late_tap_failure_survives_a_large_log_of_signals() {
+    let server = common::mock(FakeJev {
+        choose: |_, s, o| {
+            // The nearest-failure context repeats the TAP text on other candidates.
+            // Choose the candidate itself, in both rounds, rather than its context.
+            let mut candidates = s.clone();
+            for item in candidates["items"].as_array_mut().unwrap() {
+                *item = item.as_str().unwrap().lines().next().unwrap().into();
+            }
+            option_containing(&candidates, o, "not ok 43 - test/version-from-tgz.js")
+        },
+        noul: |_, _| 0.95,
+    })
+    .await;
+    let mut lines: Vec<_> = (0..13_000)
+        .map(|i| format!("warning: expected error {i}"))
+        .collect();
+    lines[7859] = "not ok 43 - test/version-from-tgz.js".into();
+    let mut cmd = common::jevify(&server);
+    let out = tokio::task::spawn_blocking(move || {
+        cmd.args(["--json", "why", "--no-save"])
+            .write_stdin(lines.join("\n"))
+            .output()
+            .unwrap()
+    })
+    .await
+    .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v["data"]["causes"][0]["line"], 7860);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn gate_keeps_failure_evidence_and_exposes_a_shortlist_on_abstention() {
+    // Either round can establish a failure; NONE winning or both Nouls low abstains.
+    for mode in [
+        "tie",
+        "bom_tie",
+        "close_none",
+        "none",
+        "low_finals",
+        "low_any",
+    ] {
+        let probabilities: common::ProbabilityVector = match mode {
+            "tie" | "bom_tie" => |_, _, opts| {
+                opts.iter()
+                    .map(|o| match o.as_str() {
+                        "yes" => 0.95,
+                        "L000" | "L001" => 0.4,
+                        "L002" => 0.15,
+                        _ => 0.05,
+                    })
+                    .collect()
+            },
+            "close_none" => |_, _, opts| {
+                opts.iter()
+                    .map(|o| match o.as_str() {
+                        "yes" => 0.95,
+                        "no" => 0.05,
+                        "L000" => 0.5,
+                        "NONE" => 0.3,
+                        _ => 0.1,
+                    })
+                    .collect()
+            },
+            "none" => |_, _, opts| {
+                opts.iter()
+                    .map(|o| match o.as_str() {
+                        "yes" => 0.95,
+                        "no" => 0.05,
+                        "L000" => 0.3,
+                        "NONE" => 0.5,
+                        _ => 0.1,
+                    })
+                    .collect()
+            },
+            "low_finals" => |_, s, opts| {
+                if opts == ["yes", "no"] {
+                    return if s.to_string().contains("context only") {
+                        vec![0.1, 0.9]
+                    } else {
+                        vec![0.95, 0.05]
+                    };
+                }
+                opts.iter()
+                    .map(|o| if o == "L000" { 0.85 } else { 0.05 })
+                    .collect()
+            },
+            _ => |_, _, opts| {
+                if opts == ["yes", "no"] {
+                    return vec![0.1, 0.9];
+                }
+                opts.iter()
+                    .map(|o| if o == "L000" { 0.85 } else { 0.05 })
+                    .collect()
+            },
+        };
+        let server = common::mock(
+            FakeJev {
+                choose: |_, _, _| "L000".into(),
+                noul: |_, _| 0.95,
+            }
+            .with_probabilities(probabilities),
+        )
+        .await;
+        let mut cmd = common::jevify(&server);
+        let log = if mode == "bom_tie" {
+            "job\tstep\t\u{feff}2026-09-28T10:00:00Z error: alpha\njob\tstep\t2026-09-28T10:00:01Z error: beta\njob\tstep\t2026-09-28T10:00:02Z error: gamma\n"
+        } else {
+            "error: alpha\nerror: beta\nerror: gamma\n"
+        };
+        let out = tokio::task::spawn_blocking(move || {
+            cmd.args(["--json", "why", "--no-save", "-n", "3"])
+                .write_stdin(log)
+                .output()
+                .unwrap()
+        })
+        .await
+        .unwrap();
+        let accepted = matches!(mode, "tie" | "bom_tie" | "close_none" | "low_finals");
+        assert_eq!(
+            out.status.code(),
+            Some(if accepted { 0 } else { 3 }),
+            "{mode}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        if accepted {
+            assert_eq!(v["data"]["causes"][0]["line"], 1);
+            if mode == "bom_tie" {
+                assert_eq!(v["data"]["causes"].as_array().unwrap().len(), 3);
+                assert_eq!(v["data"]["causes"][0]["text"], log.lines().next().unwrap());
+            }
+            continue;
+        }
+        assert!(v["data"]["causes"].as_array().unwrap().is_empty());
+        let shortlist = v["data"]["shortlist"].as_array().unwrap();
+        assert_eq!(shortlist.len(), 3);
+        assert_eq!(shortlist[0]["line"], 1);
+        assert_eq!(shortlist[0]["text"], "error: alpha");
+        assert!(shortlist.iter().all(|c| c["p"].is_number()));
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(stderr.contains("jevify why: nearest (not chosen):"));
+        for c in shortlist {
+            assert!(stderr.contains(&format!(
+                "line {}: {}",
+                c["line"],
+                c["text"].as_str().unwrap()
+            )));
+        }
+    }
+}
+
 /// The cause is the line Jev picks, with `-C` lines of context around it; the human output
 /// numbers the lines and marks the cause.
 #[tokio::test(flavor = "multi_thread")]
