@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+## 0.14.1 - 2026-09-28
+
+Changed:
+
+- `why` strips CI prefixes and ANSI escapes from selection evidence, preserves original output
+  lines, and selects one cause per failed job. It recognizes TAP `not ok`, follows a selected
+  summary with its diagnostic block, and exposes `data.shortlist` on exit 3.
+
+Measured:
+
+- On 2026-09-28 with TypeSafe, `why` root-cause-first hits rise from 28 to 30 of 34 failed
+  GitHub Actions runs from 30 public repositories; wrong first lines fall from six to four,
+  with zero abstentions. Top-three hits rise from 30 to 31 of 34. JSON stdout contains 99.76%
+  fewer estimated tokens than full logs; p50 latency is 0.87 s on a loaded machine.
+  Tail finds a gold line in 10/34, grep in 11/34. These are development-set payload and
+  retrieval measurements, not total inference cost or agent task success (`benchmarks/why-ci.md`).
+
 ## 0.14.0 - 2026-09-28
 
 Changed:
