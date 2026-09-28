@@ -7,8 +7,6 @@ pub mod filter;
 pub mod is;
 pub mod label;
 pub mod pick;
-pub mod run;
-pub mod sort;
 pub mod why;
 
 /// The gate scores of a ranking: the two top Choice probabilities, P(NONE) and the Noul.

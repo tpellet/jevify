@@ -622,20 +622,23 @@ impl Client {
             // keeps falling through to `api_protocol`.
             let body_rejected = matches!(status, 413 | 422)
                 || (status == 400 && matches!(self.backend, Backend::Classifier));
+            if matches!(status, 402 | 429) {
+                if let Some(error) = spending_error(self.backend, &body) {
+                    return Err(error);
+                }
+            }
             match status {
                 200 => {
                     return Ok(body);
                 }
                 401 | 403 => return Err(JevifyError::BadKey(status)),
-                // classifier.dev's spending limit: the free request is too big for the service
-                // to judge at all. Not retried; the batch size keeps jevify under it.
                 402 => {
                     let text = String::from_utf8_lossy(&body);
                     if rid.is_some() {
                         *self.stats.request_id.lock().unwrap() = rid;
                     }
                     return Err(JevifyError::Unavailable(format!(
-                        "HTTP 402: the service refused the request's size without a key ({})",
+                        "HTTP 402: {}",
                         rejection_message(&text)
                     )));
                 }
@@ -676,6 +679,71 @@ impl Client {
             }
         }
         Err(JevifyError::Unavailable(last))
+    }
+}
+
+fn spending_error(backend: Backend, body: &[u8]) -> Option<JevifyError> {
+    let parsed: serde_json::Value = serde_json::from_slice(body).ok()?;
+    let parts = [
+        &parsed,
+        &parsed["detail"],
+        &parsed["error"],
+        &parsed["detail"]["error"],
+    ];
+    let has_code = |code| {
+        parts.iter().any(|part| {
+            ["error_type", "code"]
+                .iter()
+                .any(|key| part[*key].as_str() == Some(code))
+        })
+    };
+    let message = parts
+        .iter()
+        .flat_map(|part| {
+            [
+                part.as_str(),
+                part["message"].as_str(),
+                part["error"].as_str(),
+            ]
+            .into_iter()
+            .flatten()
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_ascii_lowercase();
+    match backend {
+        Backend::Typesafe
+            if has_code("billing_error")
+                || message.contains("no available typesafe api credits") =>
+        {
+            Some(JevifyError::quota_exhausted(
+                "TypeSafe account has no credits",
+                "add credits in the TypeSafe console, or set TYPESAFE_API_KEY_FILE to a funded account's key",
+            ))
+        }
+        Backend::Classifier
+            if has_code("free_ip_daily_budget")
+                || (message.contains("budget")
+                    && (message.contains("daily")
+                        || message.contains("per day")
+                        || message.contains("per utc day"))
+                    && !message.contains("global")
+                    && !message.contains("across everyone")
+                    && ["spent", "exhaust", "exceed", "reached", "used up"]
+                        .iter()
+                        .any(|word| message.contains(word))) =>
+        {
+            Some(JevifyError::quota_exhausted(
+                "the free per-IP budget is spent until 00:00 UTC; set TYPESAFE_API_KEY_FILE",
+                "classifier.dev allows $0.50 per IP per UTC day; wait until 00:00 UTC or set TYPESAFE_API_KEY_FILE",
+            ))
+        }
+        Backend::Classifier if has_code("request_spending_limit") => {
+            Some(JevifyError::InputTooLarge(
+                "the request exceeds classifier.dev's $0.01 free per-request spending limit".into(),
+            ))
+        }
+        _ => None,
     }
 }
 

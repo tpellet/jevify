@@ -6,7 +6,7 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
     name = "jevify",
     version,
     about = "Answer questions about text you already have: find a line, an error, a command or a folder by meaning. jevify selects and never generates, with backend-specific decision scores.",
-    after_help = "Examples:\n  gh run view --log-failed | jevify why\n  git branch | jevify pick \"the payment timeout fix\"\n  cargo test 2>&1 | jevify filter \"reports a failed assertion\"\n  jevify is \"the customer asks for a refund\" < mail.txt && ./refund\n  jevify route \"keep my mac awake for an hour\"\n  jevify add --dry-run \"the token expiry fix\"\n  jevify sort ~/Downloads\n\nExit codes: 0 ok, 1 no, 2 usage, 3 nothing fits or unsure, 4 API unavailable, 5 auth, 6 input, 7 reserved, 130 declined.\nAgents: jevify capabilities --json | jevify init agents"
+    after_help = "Examples:\n  gh run view --log-failed | jevify why\n  jevify fill --dry-run -- git switch '@{branch:the payment timeout fix}'\n  jevify pick --from tool \"keep my mac awake for an hour\"\n  git branch | jevify pick \"the payment timeout fix\"\n  cargo test 2>&1 | jevify filter \"reports a failed assertion\"\n  jevify add --dry-run \"the token expiry fix\"\n\nExit codes: 0 ok, 1 no, 2 usage, 3 nothing fits or unsure, 4 API unavailable, 5 auth, 6 input, 130 declined.\nAgents: jevify capabilities --json | jevify init agents"
 )]
 pub struct Cli {
     #[command(flatten)]
@@ -20,9 +20,6 @@ pub struct GlobalOpts {
     /// Machine output: one JSON envelope on stdout (alias: --robot)
     #[arg(long, global = true, alias = "robot")]
     pub json: bool,
-    /// Output format (overrides --json)
-    #[arg(long, global = true, value_enum)]
-    pub format: Option<Format>,
     /// Decision threshold on the backend's score (calibration depends on task and backend)
     #[arg(short = 't', long, global = true, env = "JEVIFY_THRESHOLD")]
     pub threshold: Option<f64>,
@@ -39,11 +36,11 @@ pub struct GlobalOpts {
 
 impl GlobalOpts {
     pub fn format(&self) -> Format {
-        self.format.unwrap_or(if self.json {
+        if self.json {
             Format::Json
         } else {
             Format::Human
-        })
+        }
     }
 }
 
@@ -118,15 +115,6 @@ pub enum Cmd {
         #[arg(long)]
         no_save: bool,
     },
-    /// Describe a task and print the installed tool that fits it
-    #[command(
-        after_help = "Examples:\n  jevify route \"keep my mac awake for an hour\"\n  jevify route --json \"test how fast my connection is\"\n\nSearches commands on PATH by their man pages and prints a tool, summary and synopsis. Starts no command.\nExit: 0 found, 3 no tool fits. --json data: tool, summary, synopsis, fit, alternatives[]."
-    )]
-    Route {
-        /// The task, e.g. "count the lines in notes.txt"
-        #[arg(required = true, num_args = 1..)]
-        intent: Vec<String>,
-    },
     /// Keep stdin records that satisfy a statement
     #[command(
         after_help = "Example:\n  cargo test 2>&1 | jevify filter 'reports a failed assertion'\n\n-v inverts; -c prints the count. Unsure records stay unless --strict. --verbose has no short flag. --files reads stdin paths; hidden or secret-looking paths and symlink files receive no excerpt, and a file that cannot be read is named on stderr and comes out unsure (both count in excerpts withheld: N; records carry unreadable: REASON). Saves raw input, secrets included, for seven days, unless --no-save or JEVIFY_NO_SAVE=1 (JEVIFY_NO_CACHE does not stop it). Status: jevify filter: kept N of M, U unsure, full output: PATH.\nExit: 0 kept some, 1 kept none, 3 every record unsure. --json data: records[{text, ordinal, p, verdict, lossy?}], kept, total, unsure, complete, saved_input, excerpts_withheld. A skipped or failed save sets complete: false. Non-UTF-8 records have lossy: true."
@@ -198,31 +186,11 @@ pub enum Cmd {
         #[arg(long)]
         dry_run: bool,
     },
-    /// Propose a folder for each file in a directory by reading the files; moves nothing without --apply
-    #[command(
-        after_help = "Examples:\n  jevify sort ~/Downloads\n  jevify sort ~/Downloads --apply\n  jevify sort ~/Downloads --undo <log>\n\nDestinations are the folders that already exist. Never overwrites, never deletes, same volume only.\nExit: 0 moves proposed (or applied), 3 nothing can be placed, 6 no folders to sort into. --json data: moves[{from, to, p}], skipped[{file, reason}], undo_log, applied."
-    )]
-    Sort {
-        /// Directory whose files (not recursive, not hidden) are sorted, or one file to sort alone
-        dir: std::path::PathBuf,
-        /// Root whose sub-folders (depth <= 2) are the destinations (default: <DIR>)
-        #[allow(rustdoc::invalid_html_tags)]
-        #[arg(long)]
-        into: Option<std::path::PathBuf>,
-        /// Move the files (dry-run otherwise) and write an undo log
-        #[arg(long)]
-        apply: bool,
-        /// Move files back using a log written by --apply
-        #[arg(long)]
-        undo: Option<std::path::PathBuf>,
-    },
     /// Describe commands, flags, exit codes, env and limits for agents
     Capabilities,
-    /// Agent handbook: guide | commands | exit-codes | examples | privacy
-    RobotDocs { topic: Option<String> },
     /// Check which backend answers, whether a key is needed, and how fast it replies
     Health,
-    /// Print shell integration (`,` alias for `jevify route`) or an agent instruction block
+    /// Print an agent instruction block
     Init { shell: Shell },
 }
 
@@ -285,8 +253,6 @@ fn parse_labels(text: &str) -> Result<Labels, String> {
 
 #[derive(ValueEnum, Clone, Copy, Debug)]
 pub enum Shell {
-    Zsh,
-    Bash,
     Agents,
 }
 

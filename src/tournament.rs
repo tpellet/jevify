@@ -164,13 +164,37 @@ pub(crate) async fn window(
     items: &[(usize, String)],
     prompts: &Prompts,
 ) -> Result<Ranking, JevifyError> {
+    ask_window(client, request, items, prompts, true).await
+}
+
+async fn ask_window(
+    client: &Client,
+    request: &str,
+    items: &[(usize, String)],
+    prompts: &Prompts,
+    ranked: bool,
+) -> Result<Ranking, JevifyError> {
     // The backend's own input limit caps the window budget: classifier.dev rejects an input
     // over 32,000 characters, so its windows carry shorter excerpts, never a rejected request.
     let budget = WINDOW_CHARS.min(client.backend().max_state_chars());
-    let per_item = (budget / items.len().max(1)).clamp(200, 2_000);
+    // Finals arrive in round-one rank order. Give the leading third half the text
+    // budget, so their patches survive a crowded final. Unranked windows stay even.
+    let leading = items.len().div_ceil(3);
+    let per_item = |rank| {
+        let share = if ranked && items.len() > 2 {
+            if rank < leading {
+                (budget / 2) / leading
+            } else {
+                (budget - budget / 2) / (items.len() - leading)
+            }
+        } else {
+            budget / items.len().max(1)
+        };
+        share.min(2_000)
+    };
     let state = serde_json::json!({
         "request": request,
-        "items": items.iter().enumerate().map(|(i, (_, t))| format!("[{}] {}", id(i), clip(&crate::input::redact(t), per_item))).collect::<Vec<_>>(),
+        "items": items.iter().enumerate().map(|(i, (_, t))| format!("[{}] {}", id(i), clip(&crate::input::redact(t), per_item(i)))).collect::<Vec<_>>(),
     });
     let mut crit: BTreeMap<String, Option<String>> =
         (0..items.len()).map(|i| (id(i), None)).collect();
@@ -259,7 +283,7 @@ pub async fn shortlist(
     let all: Vec<(usize, String)> = items.iter().cloned().enumerate().collect();
     let rounds = futures::future::try_join_all(
         all.chunks(client.backend().window())
-            .map(|w| window(client, request, w, prompts)),
+            .map(|w| ask_window(client, request, w, prompts, false)),
     )
     .await?;
     let finalists = (0..n)

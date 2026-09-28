@@ -299,8 +299,7 @@ fn parse_item(
     let response = Response {
         model,
         answers,
-        // classifier.dev counts classifications, not tokens: it is free, and `meta.cost_usd`
-        // stays 0 because nothing was spent.
+        // classifier.dev does not report token usage.
         usage: Usage::default(),
     };
     response.validate(questions)?;

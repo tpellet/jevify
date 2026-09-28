@@ -148,8 +148,9 @@ const CODED: [Coded; 6] = [
     Coded {
         name: "tool",
         evidence: Some(
-            "name and one-line manual summary from the PATH and the man index, cached under JEVIFY_CACHE_DIR",
+            "name and one-line manual summary from JEVIFY_INVENTORY_FILE or PATH; finalists carry man-page descriptions",
         ),
+        tier_two: true,
         ..LISTED
     },
 ];
@@ -460,6 +461,41 @@ pub async fn enrich_in(
     let evidence: fn(&OsStr, &Env) -> Result<String, JevifyError> = match kind {
         "branch" => branch_evidence,
         "commit" => commit_evidence,
+        "tool" => {
+            let handles = handles.to_vec();
+            let env = env.clone();
+            let count = handles.len();
+            return tokio::task::spawn_blocking(move || {
+                let values = std::thread::scope(|scope| {
+                    let workers: Vec<_> = handles
+                        .iter()
+                        .map(|handle| {
+                            let env = &env;
+                            scope.spawn(move || {
+                                handle
+                                    .to_str()
+                                    .and_then(|name| {
+                                        crate::manpage::description_within(
+                                            name,
+                                            &env.path,
+                                            env.deadline,
+                                            500,
+                                        )
+                                    })
+                                    .unwrap_or_default()
+                            })
+                        })
+                        .collect();
+                    workers
+                        .into_iter()
+                        .map(|worker| worker.join().unwrap_or_default())
+                        .collect()
+                });
+                (values, 0)
+            })
+            .await
+            .unwrap_or_else(|_| (vec![String::new(); count], 0));
+        }
         "dir" => {
             let prefix = (!prefix.as_os_str().is_empty()).then_some(prefix);
             let Ok(relative) = resolve_prefix(prefix, env) else {
@@ -1214,7 +1250,17 @@ fn paths(
 /// `tool`: the inventory of the injected PATH. Names the cap dropped count in `omitted` and in
 /// `total`, so the listing never presents a capped list as complete.
 fn tools(env: &Env) -> Result<Listing, JevifyError> {
-    let inventory = crate::inventory::load_with(&env.path, env.cache_dir.as_deref(), env.deadline)?;
+    let inventory = if let Some(path) = std::env::var_os("JEVIFY_INVENTORY_FILE") {
+        let bytes = std::fs::read(path)
+            .map_err(|e| JevifyError::Input(format!("JEVIFY_INVENTORY_FILE: {e}")))?;
+        crate::inventory::Inventory {
+            tools: serde_json::from_slice(&bytes)
+                .map_err(|e| JevifyError::Input(format!("JEVIFY_INVENTORY_FILE: {e}")))?,
+            omitted: 0,
+        }
+    } else {
+        crate::inventory::load_with(&env.path, env.cache_dir.as_deref(), env.deadline)?
+    };
     let records = inventory
         .tools
         .into_iter()

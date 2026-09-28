@@ -300,7 +300,7 @@ async fn later_batches_wait_and_duplicates_keep_their_original_positions() {
 
 /// HTTP 402 is API unavailable and not retried: one request per batch.
 #[tokio::test]
-async fn spending_limit_is_exit_4_and_not_retried() {
+async fn per_request_spending_limit_is_an_input_error_and_not_retried() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/v1/classify"))
@@ -314,7 +314,7 @@ async fn spending_limit_is_exit_4_and_not_retried() {
         .write_stdin(records(70))
         .output()
         .unwrap();
-    assert_eq!(envelope(&out, 4)["error"]["kind"], "api_unavailable");
+    assert_eq!(envelope(&out, 6)["error"]["kind"], "input_too_large");
     assert_eq!(server.received_requests().await.unwrap().len(), 2);
 }
 

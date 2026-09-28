@@ -168,13 +168,12 @@ pub async fn run(
         eprintln!("jevify pick: finalists per window: {}", ranking.n);
     }
     ctx.stats.gate(super::gate_of(&ranking));
-    // Found only if the absolute Noul agrees and the best line beats NONE in the Choice.
-    let found = ranking.any >= ctx.threshold
-        && ranking
-            .candidates
-            .first()
-            .is_some_and(|c| c.p > ranking.none);
-    let mut selected: Vec<_> = if found {
+    let reason = match decide(&ranking, ctx.threshold) {
+        Decision::Found(_) => None,
+        Decision::NoMatch => Some(crate::exit::NO_MATCH),
+        Decision::Ambiguous(_) => Some(crate::exit::AMBIGUOUS),
+    };
+    let mut selected: Vec<_> = if reason.is_none() {
         ranking
             .candidates
             .iter()
@@ -215,16 +214,13 @@ pub async fn run(
             human.extend_from_slice(&bytes[record.raw.clone()]);
         }
     }
-    let mut data = serde_json::json!({ "matches": matches, "any": ranking.any, "source": if files { "files" } else { "stdin" } });
-    if matches.is_empty() {
+    let mut data = serde_json::json!({ "matches": matches, "reason": reason, "any": ranking.any, "source": if files { "files" } else { "stdin" } });
+    if let Some(reason) = reason {
         let closest = super::closest(&ranking, |i| {
             records[kept[i]].handle.to_string_lossy().into_owned()
         });
         let hint = super::abstain_hint(&ranking, ctx.threshold, super::DESCRIBE_THE_RECORD);
-        eprintln!(
-            "{}",
-            super::abstain_line("pick", crate::exit::NO_MATCH, &closest, &hint)
-        );
+        eprintln!("{}", super::abstain_line("pick", reason, &closest, &hint));
         data["closest"] = closest_json(&closest);
         data["hint"] = hint.into();
     }
@@ -302,24 +298,33 @@ async fn from_kind(
         if windows == 1 {
             ranking = short.windows[0].clone();
         }
-        let finals_run = windows > 1
-            || (kind.has_tier_two
-                && !matches!(decide(&ranking, ctx.threshold), Decision::Found(_)));
+        let finals_run = windows > 1 || kind.has_tier_two;
+        let finalists = if windows == 1 && kind.has_tier_two {
+            // Match fill's wider evidence pool: a misleading commit subject can give the
+            // real change zero probability, so commits keep zeroes for patch inspection.
+            ranking
+                .candidates
+                .iter()
+                .filter(|c| name == "commit" || c.p > 0.0)
+                .take(MAX_FINALISTS)
+                .copied()
+                .collect()
+        } else {
+            short.finalists.clone()
+        };
         let judged: Vec<usize> = if finals_run {
-            short.finalists.iter().map(|c| c.index).collect()
+            finalists.iter().map(|c| c.index).collect()
         } else {
             vec![]
         };
         short.record(&ctx.stats, &judged, |i| i + 1);
-        if finals_run {
-            let mut finals: Vec<_> = short
-                .finalists
+        if finals_run && !finalists.is_empty() {
+            let mut finals: Vec<_> = finalists
                 .iter()
                 .map(|c| (c.index, items[c.index].clone()))
                 .collect();
             if kind.has_tier_two {
-                let handles: Vec<_> = short
-                    .finalists
+                let handles: Vec<_> = finalists
                     .iter()
                     .take(MAX_FINALISTS)
                     .map(|c| listing.records[c.index].handle.clone())

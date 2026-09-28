@@ -59,14 +59,6 @@ pub struct UsageAccounting {
     pub output_tokens: TokenAccounting,
 }
 
-#[derive(Serialize, Debug, Clone)]
-pub struct CostEstimate {
-    pub basis: &'static str,
-    pub input_price_per_mtok: f64,
-    pub reported_input_subtotal_usd: f64,
-    pub complete: bool,
-}
-
 #[derive(Serialize, Default, Debug, Clone)]
 pub struct Telemetry {
     pub inference_posts: AttemptCounts,
@@ -81,16 +73,12 @@ pub struct Telemetry {
     pub usage: UsageAccounting,
     /// The client cannot infer logical rounds from physical requests.
     pub logical_rounds: Option<u64>,
-    pub cost_estimate: Option<CostEstimate>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum, Serialize)]
-#[serde(rename_all = "lowercase")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Format {
     Human,
     Json,
-    Jsonl,
-    Toon,
 }
 
 /// Retry waits: how many, and their elapsed milliseconds in total.
@@ -183,8 +171,8 @@ pub struct RoundOneWindow {
 
 /// Round one of a tournament, as the shortlist computed it: the windows in input order, and
 /// `finalists`, the items the finals request then held, in its order: the shortlist's picks
-/// (`n` per window, by rank then window), widened by `fill`, joined by `why`'s panic lines or
-/// capped by `route`; empty when round one alone decided.
+/// (`n` per window, by rank then window), widened by `fill` or joined by `why`'s panic lines;
+/// empty when round one alone decided.
 #[derive(Serialize, Debug, Clone, PartialEq)]
 pub struct RoundOne {
     pub windows: Vec<RoundOneWindow>,
@@ -218,7 +206,6 @@ pub struct Meta {
     pub requests: u64,
     pub cache_hits: u32,
     pub input_tokens: Option<u64>,
-    pub cost_usd: Option<f64>,
     pub threshold: f64,
     /// `x-typesafe-request-id` of the last TypeSafe response seen (success or failure); what
     /// TypeSafe support asks for. `null` until a request was made.
@@ -250,13 +237,8 @@ pub struct Envelope<'a> {
 }
 
 pub fn render(format: Format, env: &Envelope) -> anyhow::Result<String> {
-    let v = serde_json::to_value(env)?;
     Ok(match format {
-        Format::Json => serde_json::to_string_pretty(&v)?,
-        Format::Jsonl => serde_json::to_string(&v)?,
-        Format::Toon => {
-            toon_format::encode_default(&v).map_err(|e| anyhow::anyhow!(e.to_string()))?
-        }
+        Format::Json => serde_json::to_string(env)?,
         Format::Human => unreachable!("human output is rendered by each command"),
     })
 }

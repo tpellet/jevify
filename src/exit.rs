@@ -20,8 +20,6 @@ pub enum Exit {
     Unavailable = 4,
     Auth = 5,
     Input = 6,
-    /// Never returned: no verb reports a child command's failure.
-    Reserved = 7,
     Interrupted = 130,
 }
 
@@ -29,18 +27,17 @@ impl Exit {
     pub fn code(self) -> i32 {
         self as i32
     }
-    pub const ALL: [(Exit, &'static str); 9] = [
+    pub const ALL: [(Exit, &'static str); 8] = [
         (Exit::Ok, "success: yes / found"),
         (Exit::No, "`is`: the condition does not hold"),
         (Exit::Usage, "usage error: bad flag or missing argument"),
         (Exit::Abstain, "abstain: nothing fits, or unsure"),
-        (Exit::Unavailable, "the API is unavailable after retries"),
+        (
+            Exit::Unavailable,
+            "API unavailable, deadline passed or quota exhausted",
+        ),
         (Exit::Auth, "API key missing or rejected"),
         (Exit::Input, "input error: empty, too large, or unreadable"),
-        (
-            Exit::Reserved,
-            "reserved, never returned: a command started by fill owns its own exit code",
-        ),
         (Exit::Interrupted, "interrupted or declined at confirmation"),
     ];
 }
@@ -93,9 +90,10 @@ impl JevifyError {
     /// `capabilities` publishes, built from this one table. `kind()` is the only producer, and
     /// the tests below prove the two agree in both directions, so a kind cannot reach a caller
     /// without appearing here, and nothing here is unreachable.
-    pub const KINDS: [(&'static str, Exit); 17] = [
+    pub const KINDS: [(&'static str, Exit); 18] = [
         ("usage", Exit::Usage),
         ("api_unavailable", Exit::Unavailable),
+        ("quota_exhausted", Exit::Unavailable),
         ("api_deadline", Exit::Unavailable),
         ("api_protocol", Exit::Unavailable),
         ("missing_api_key", Exit::Auth),
@@ -112,6 +110,16 @@ impl JevifyError {
         ("status_file_unwritable", Exit::Input),
         ("declined", Exit::Interrupted),
     ];
+
+    pub fn quota_exhausted(message: &str, hint: &'static str) -> Self {
+        Self::Kinded {
+            kind: "quota_exhausted",
+            exit: Exit::Unavailable,
+            message: message.into(),
+            hint,
+            example: "TYPESAFE_API_KEY_FILE=/path/to/key jevify health",
+        }
+    }
 
     pub fn stdin_is_tty(message: String) -> Self {
         Self::Kinded {
@@ -192,8 +200,7 @@ impl JevifyError {
             Self::Kinded { kind, .. } => kind,
             Self::MissingKey => "missing_api_key",
             Self::BadKey(_) => "bad_api_key",
-            // Exit 4 covers three situations a caller answers differently: back off, raise the
-            // budget, or report a bug. The kind, not the message, says which.
+            // The kind, not exit 4 alone, tells callers whether retrying can help.
             Self::Deadline(_) => "api_deadline",
             Self::Unavailable(_) => "api_unavailable",
             Self::Protocol(_) => "api_protocol",
@@ -216,7 +223,7 @@ impl JevifyError {
                 "the work was cancelled, not refused: raise JEVIFY_DEADLINE, or split the input into smaller runs"
             }
             Self::Unavailable(_) => {
-                "retry later; classifier.dev allows 20,000 classifications a day per IP, and a narrower list costs fewer"
+                "retry later; classifier.dev's free budget is $0.50 per IP per UTC day, with up to $0.01 per request; narrow the input or set TYPESAFE_API_KEY_FILE"
             }
             Self::Protocol(_) => {
                 "the API may have changed, or JEVIFY_BASE_URL points at the wrong server; run `jevify health` and report the issue with `jevify --version`"
@@ -283,6 +290,7 @@ mod tests {
             JevifyError::MissingKey,
             JevifyError::BadKey(401),
             JevifyError::Unavailable("connection refused".into()),
+            JevifyError::quota_exhausted("no credits", "add credits"),
             JevifyError::Deadline("600".into()),
             JevifyError::Protocol(String::new()),
             JevifyError::EmptyInput(""),

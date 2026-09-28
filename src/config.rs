@@ -58,7 +58,7 @@ impl Backend {
 pub struct Config {
     pub backend: Backend,
     pub key: Option<String>,
-    /// Read lazily by `api_key`: `capabilities`, `init` and `robot-docs` need no key, so a bad
+    /// Read lazily by `api_key`: `capabilities` and `init` need no key, so a bad
     /// path must not break them.
     pub key_file: Option<PathBuf>,
     pub base_url: String,
@@ -66,7 +66,6 @@ pub struct Config {
     pub threshold: f64,
     pub concurrency: usize,
     pub cache_dir: Option<PathBuf>,
-    pub price_per_mtok: f64,
     pub stats: Arc<Stats>,
 }
 
@@ -112,7 +111,7 @@ pub fn config_dir(value: Option<&str>) -> Option<PathBuf> {
 }
 
 /// The verb's overall budget, `JEVIFY_DEADLINE` in whole seconds (default 600). Read when a
-/// `Client` is built, so `capabilities`, `init` and `robot-docs` never need it; zero is a
+/// `Client` is built, so `capabilities` and `init` never need it; zero is a
 /// usage error.
 pub(crate) fn deadline() -> Result<std::time::Duration, JevifyError> {
     let seconds: u64 = parse("JEVIFY_DEADLINE", 600)?;
@@ -222,14 +221,6 @@ impl Config {
             // 16 in flight at ~0.4 s each is ~40 req/s, twice the 1,200/min budget; 8 stays under it.
             concurrency: parse("JEVIFY_CONCURRENCY", backend.default_concurrency())?.max(1),
             cache_dir,
-            price_per_mtok: parse(
-                "JEVIFY_PRICE_PER_MTOK",
-                if backend == Backend::Classifier {
-                    0.0
-                } else {
-                    0.042f64
-                },
-            )?,
             stats: Arc::new(Stats::default()),
         })
     }
@@ -254,24 +245,12 @@ impl Config {
 
     pub fn meta(&self) -> Meta {
         let s = &self.stats;
-        let mut telemetry = s.telemetry();
+        let telemetry = s.telemetry();
         let usage = &telemetry.usage.input_tokens;
         let tokens = usage.reported_subtotal;
-        let cost = tokens as f64 * self.price_per_mtok / 1_000_000.0;
-        let cost_complete = usage.complete || self.price_per_mtok == 0.0;
         let input_tokens = usage.complete.then_some(tokens);
         let output = &telemetry.usage.output_tokens;
         let output_tokens = output.complete.then_some(output.reported_subtotal);
-        telemetry.cost_estimate = Some(crate::output::CostEstimate {
-            basis: if self.backend == Backend::Classifier && self.price_per_mtok == 0.0 {
-                "free_service"
-            } else {
-                "configured_input_token_price"
-            },
-            input_price_per_mtok: self.price_per_mtok,
-            reported_input_subtotal_usd: cost,
-            complete: cost_complete,
-        });
         let answering = s.model.lock().unwrap().clone();
         Meta {
             backend: self.backend.as_str(),
@@ -292,7 +271,6 @@ impl Config {
             requests: telemetry.inference_posts.attempted,
             cache_hits: s.cache_hits.load(Ordering::Relaxed),
             input_tokens,
-            cost_usd: cost_complete.then_some(cost),
             threshold: self.threshold,
             request_id: s.request_id.lock().unwrap().clone(),
             usage: crate::output::Usage {

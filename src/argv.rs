@@ -224,10 +224,7 @@ impl Argv {
 
     /// The same command with a placeholder description when its verb takes one and it has none.
     fn described(&self) -> Self {
-        let takes_text = matches!(
-            self.verb.as_str(),
-            "pick" | "filter" | "is" | "add" | "route"
-        );
+        let takes_text = matches!(self.verb.as_str(), "pick" | "filter" | "is" | "add");
         if !takes_text || crate::cli::words(&self.words).is_some() {
             self.clone()
         } else {
@@ -240,7 +237,6 @@ fn placeholder(verb: &str) -> &'static str {
     match verb {
         "filter" | "is" => "<what must be true of the text>",
         "add" => "<the topic of the changes>",
-        "route" => "<the task>",
         _ => "<what the line you want says>",
     }
 }
@@ -390,23 +386,6 @@ fn usage(argv: &Argv, message: &str) -> Option<(String, String)> {
         ));
     }
     if let Some(unexpected) = between(message, "unexpected argument '", "'") {
-        let destination = ["--to", "--dest", "--destination", "--target", "--folder"];
-        if verb == "sort" && (destination.contains(&unexpected) || !unexpected.starts_with('-')) {
-            let mut fixed = argv.clone();
-            for flag in destination {
-                fixed = fixed.without(flag);
-            }
-            if let [dir, root, ..] = argv.words.as_slice() {
-                fixed.words = vec![dir.clone()];
-                fixed.flags.push("--into".into());
-                fixed.flags.push(root.clone());
-            }
-            return Some((
-                "sort takes one directory; --into ROOT names where the destination folders are"
-                    .into(),
-                fixed.render(),
-            ));
-        }
         if verb == "label" && !unexpected.starts_with('-') {
             let labels = argv
                 .words

@@ -348,7 +348,6 @@ pub fn config(server: &MockServer) -> jevify::config::Config {
         threshold: 0.5,
         concurrency: 8,
         cache_dir: None,
-        price_per_mtok: 0.042,
         stats: std::sync::Arc::new(jevify::jev::client::Stats::default()),
     }
 }

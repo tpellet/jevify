@@ -25,18 +25,15 @@ use std::ffi::OsString;
 use std::io::Write;
 use std::time::Instant;
 
-const VERBS: [&str; 13] = [
+const VERBS: [&str; 10] = [
     "fill",
     "pick",
     "why",
-    "route",
     "filter",
     "label",
     "is",
     "add",
-    "sort",
     "capabilities",
-    "robot-docs",
     "health",
     "init",
 ];
@@ -50,14 +47,13 @@ pub const QUICK_START: &str = concat!(
   <list> | jevify pick "<description>"    find one line by meaning
   <cmd> 2>&1 | jevify why                 find the line that caused a failure
   jevify is "<statement>" < file          yes / no / unsure as exit code 0 / 1 / 3
-  jevify route "<task>"                  find the installed command for a task
+  jevify pick --from tool "<task>"       find the installed command for a task
   <list> | jevify filter "<statement>"    keep matching records
   <list> | jevify label a,b,c             tag each record with a label
   jevify add --dry-run "<topic>"          stage only the git changes about a topic
-  jevify sort <dir>                       propose a folder for each file (dry run)
 Add --json for one JSON object on stdout. No key needed.
 Exit: 0 ok, 1 no, 2 usage, 3 nothing fits or unsure, 4 API unavailable, 5 auth, 6 input.
-More: jevify <verb> --help | agents: jevify capabilities --json, jevify robot-docs
+More: jevify <verb> --help | agents: jevify capabilities --json, jevify init agents
 "#
 );
 
@@ -70,9 +66,7 @@ pub fn main_exit() -> i32 {
     // A verb option written before the verb moves after it, where clap reads it.
     let args = argv::reorder(&std::env::args_os().skip(1).collect::<Vec<_>>());
     let name = raw_command(&args);
-    let removed = if name == "run" {
-        Some(("jevify", "use jevify route 'x'"))
-    } else if name == "why" && args.iter().any(|a| a == "--") {
+    let removed = if name == "why" && args.iter().any(|a| a == "--") {
         Some(("why", "use CMD 2>&1 | jevify why"))
     } else {
         None
@@ -167,37 +161,17 @@ fn clap_message(e: &clap::Error) -> String {
 
 /// Clap failed before a `Cli` existed, so the requested machine format is read from the raw args.
 fn machine_format(args: &[OsString]) -> Option<Format> {
-    use clap::ValueEnum;
-    let mut json = false;
-    let mut format = None;
-    let mut it = args.iter().take_while(|arg| *arg != "--");
-    while let Some(a) = it.next() {
-        let Some(a) = a.to_str() else { continue };
-        match a {
-            "--json" | "--robot" => json = true,
-            "--format" => {
-                format = it
-                    .next()
-                    .and_then(|v| v.to_str())
-                    .and_then(|v| Format::from_str(v, true).ok())
-            }
-            other => {
-                if let Some(v) = other.strip_prefix("--format=") {
-                    format = Format::from_str(v, true).ok();
-                }
-            }
-        }
-    }
-    format
-        .or(json.then_some(Format::Json))
-        .filter(|f| *f != Format::Human)
+    args.iter()
+        .take_while(|arg| *arg != "--")
+        .any(|arg| arg == "--json" || arg == "--robot")
+        .then_some(Format::Json)
 }
 
 fn raw_command(args: &[OsString]) -> &str {
     let mut args = args.iter().take_while(|arg| *arg != "--");
     while let Some(arg) = args.next() {
         match arg.to_str() {
-            Some("--format" | "--threshold" | "-t" | "--model") => {
+            Some("--threshold" | "-t" | "--model") => {
                 args.next();
             }
             Some(value) if value.starts_with('-') => {}
@@ -217,14 +191,11 @@ fn command_name(cmd: &Cmd) -> &'static str {
         Cmd::Fill { .. } => "fill",
         Cmd::Pick { .. } => "pick",
         Cmd::Why { .. } => "why",
-        Cmd::Route { .. } => "route",
         Cmd::Filter { .. } => "filter",
         Cmd::Label { .. } => "label",
         Cmd::Is { .. } => "is",
         Cmd::Add { .. } => "add",
-        Cmd::Sort { .. } => "sort",
         Cmd::Capabilities => "capabilities",
-        Cmd::RobotDocs { .. } => "robot-docs",
         Cmd::Health => "health",
         Cmd::Init { .. } => "init",
     }
@@ -274,13 +245,8 @@ async fn run_cli(cli: Cli) -> i32 {
                 if cli.g.verbose && name != "fill" {
                     eprintln!("jevify: {}", out.data);
                     eprintln!(
-                        "jevify: {} ms, {} requests, {} cached, {}",
-                        meta.elapsed_ms,
-                        meta.requests,
-                        meta.cache_hits,
-                        meta.cost_usd
-                            .map(|cost| format!("${cost:.5}"))
-                            .unwrap_or_else(|| "cost unknown".into())
+                        "jevify: {} ms, {} requests, {} cached",
+                        meta.elapsed_ms, meta.requests, meta.cache_hits,
                     );
                 }
             } else {
@@ -486,7 +452,6 @@ async fn dispatch(cli: &Cli, ctx: &config::Config) -> Result<cmd::Outcome, Jevif
             top,
             no_save,
         } => cmd::why::run(ctx, *context, *top, *no_save).await,
-        Cmd::Route { intent } => cmd::run::run(ctx, &described(intent, "route")?, machine).await,
         Cmd::Filter {
             statement,
             invert,
@@ -549,14 +514,7 @@ async fn dispatch(cli: &Cli, ctx: &config::Config) -> Result<cmd::Outcome, Jevif
             yes,
             dry_run,
         } => cmd::add::run(ctx, &described(topic, "add")?, *yes, *dry_run, machine).await,
-        Cmd::Sort {
-            dir,
-            into,
-            apply,
-            undo,
-        } => cmd::sort::run(ctx, dir, into.as_deref(), *apply, undo.as_deref()).await,
         Cmd::Capabilities => Ok(cmd::agent::capabilities()),
-        Cmd::RobotDocs { topic } => cmd::agent::robot_docs(topic.as_deref()),
         Cmd::Health => cmd::agent::health(ctx).await,
         Cmd::Init { shell } => Ok(cmd::agent::init(*shell)),
     }

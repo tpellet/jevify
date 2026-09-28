@@ -394,11 +394,11 @@ async fn three_best_index_blank_limit_and_no_saved_input() {
         options
             .iter()
             .map(|o| match o.as_str() {
-                "L000" => 0.4,
-                "L001" => 0.3,
-                "L002" => 0.2,
+                "L000" => 0.65,
+                "L001" => 0.2,
+                "L002" => 0.1,
                 "yes" => 0.9,
-                _ => 0.1,
+                _ => 0.05,
             })
             .collect()
     }))
@@ -712,6 +712,70 @@ fn from_outside_a_repository_the_hint_names_the_one_below() {
     let value = envelope(&out, 6);
     assert_eq!(value["error"]["kind"], "input");
     assert!(value["error"]["example"].is_string());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn stdin_near_tie_abstains_without_printing_a_record() {
+    let server = common::mock(ranked(|_, _, options| {
+        options
+            .iter()
+            .map(|o| match o.as_str() {
+                "yes" => 0.9,
+                "L000" => 0.5,
+                "L001" => 0.4,
+                _ => 0.1,
+            })
+            .collect()
+    }))
+    .await;
+    for json in [false, true] {
+        let mut cmd = common::jevify(&server);
+        if json {
+            cmd.arg("--json");
+        }
+        let out = cmd
+            .args(["pick", "-n", "2", "match"])
+            .write_stdin("alpha\nbeta\n")
+            .output()
+            .unwrap();
+        assert_eq!(out.status.code(), Some(3));
+        if json {
+            let value = envelope(&out, 3);
+            assert_eq!(value["data"]["reason"], "ambiguous");
+            assert_eq!(value["data"]["matches"], json!([]));
+        } else {
+            assert!(out.stdout.is_empty());
+        }
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn commit_patch_can_overrule_a_decisive_subject_and_recover_a_zero_score() {
+    let repo = git_repo();
+    let gold = std::process::Command::new("git")
+        .current_dir(&repo)
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .unwrap()
+        .stdout;
+    let server = common::mock(ranked(|_, state, options| {
+        if options == ["yes", "no"] {
+            return vec![0.9, 0.1];
+        }
+        let patch = state.to_string().contains("+type Slab");
+        let winner = option_containing(state, options, if patch { "+type Slab" } else { "readme" });
+        options
+            .iter()
+            .map(|o| if *o == winner { 1.0 } else { 0.0 })
+            .collect()
+    }))
+    .await;
+    let out = common::jevify(&server)
+        .current_dir(&repo)
+        .args(["pick", "--from", "commit", "integer buffers"])
+        .output()
+        .unwrap();
+    assert_eq!((out.status.code(), out.stdout), (Some(0), gold));
 }
 
 #[tokio::test(flavor = "multi_thread")]

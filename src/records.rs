@@ -356,7 +356,7 @@ fn excerpt_of(cwd: &Path, path: &Path) -> Result<Option<String>, String> {
     if !metadata.is_file() {
         return Err("not a regular file".into());
     }
-    let excerpt = crate::cmd::sort::read_excerpt(&resolved).map_err(|e| e.to_string())?;
+    let excerpt = read_excerpt(&resolved).map_err(|e| e.to_string())?;
     let name = name.to_string_lossy();
     Ok(Some(match excerpt.strip_prefix(&format!("{name}: ")) {
         Some(body) => format!("{name}: {}", meaningful(body)),
@@ -563,6 +563,104 @@ pub fn write_record(
         Err(error) if error.kind() == std::io::ErrorKind::BrokenPipe => Ok(false),
         Err(error) => Err(JevifyError::Input(error.to_string())),
     }
+}
+
+/// The excerpt of a regular file, or the error that kept its bytes from being read (a denied
+/// directory on the way, a missing file, a directory in its place). Binary content is not an
+/// error: the name alone describes it. `p` is absolute and normalized.
+fn read_excerpt(p: &Path) -> std::io::Result<String> {
+    use std::io::Read;
+    let name = p
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    // Read at most 8 KiB: `read_to_string` would load a multi-GB video before failing UTF-8.
+    let mut head = Vec::new();
+    open_regular(p)?.take(8192).read_to_end(&mut head)?;
+    Ok(excerpt_text(p, name, &head))
+}
+
+fn excerpt_text(p: &Path, name: String, head: &[u8]) -> String {
+    let text = match std::str::from_utf8(head) {
+        Ok(s) => Some(s),
+        Err(e) if e.error_len().is_none() => std::str::from_utf8(&head[..e.valid_up_to()]).ok(),
+        Err(_) => None,
+    };
+    if let Some(s) = text.filter(|s| !s.contains('\0')) {
+        return format!(
+            "{name}: {}",
+            crate::input::redact(&s.chars().take(2000).collect::<String>())
+        );
+    }
+    if p.extension().is_some_and(|e| e.eq_ignore_ascii_case("pdf"))
+        && let Some(text) = pdf_text(p)
+    {
+        return format!("{name}: {}", crate::input::redact(&text));
+    }
+    name
+}
+
+/// One `pdftotext` render of the first two pages; a hung or slow converter yields no text and
+/// the file is described by its name alone.
+const PDF_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+/// Two pages of text are a few kilobytes; the excerpt keeps 2,000 characters of it.
+const PDF_OUTPUT_CAP: usize = 64 * 1024;
+
+/// The text of the PDF at `path` from the `pdftotext` on PATH, killed at the timeout (no text
+/// then), output bounded. Only a regular file that opens without following a link is handed to
+/// the converter.
+fn pdf_text(path: &Path) -> Option<String> {
+    open_regular(path).ok()?;
+    let mut command = std::process::Command::new("pdftotext");
+    command
+        .args(["-l", "2"])
+        .arg(path)
+        .arg("-")
+        .env("PATH", std::env::var_os("PATH").unwrap_or_default());
+    let deadline = std::time::Instant::now() + PDF_TIMEOUT;
+    let output = crate::inventory::output_within(command, deadline, PDF_OUTPUT_CAP)?;
+    let text: String = String::from_utf8_lossy(&output)
+        .chars()
+        .take(2000)
+        .collect();
+    (!text.trim().is_empty()).then_some(text)
+}
+
+/// Opens a regular file by walking every component without following a link.
+fn open_regular(path: &Path) -> std::io::Result<std::fs::File> {
+    use rustix::fs::{Mode, OFlags, openat};
+    use std::io::Error;
+    let mut dir = std::fs::File::open("/")?;
+    let parent = path
+        .parent()
+        .ok_or_else(|| Error::other("missing parent"))?;
+    for component in parent.components() {
+        match component {
+            std::path::Component::RootDir => (),
+            std::path::Component::Normal(name) => {
+                dir = openat(
+                    &dir,
+                    name,
+                    OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+                    Mode::empty(),
+                )?
+                .into();
+            }
+            _ => return Err(Error::other("expected absolute normalized path")),
+        }
+    }
+    let file: std::fs::File = openat(
+        &dir,
+        path.file_name()
+            .ok_or_else(|| Error::other("missing name"))?,
+        OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::NONBLOCK | OFlags::CLOEXEC,
+        Mode::empty(),
+    )?
+    .into();
+    if !file.metadata()?.is_file() {
+        return Err(Error::other("not a regular file"));
+    }
+    Ok(file)
 }
 
 #[cfg(test)]

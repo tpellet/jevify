@@ -114,7 +114,7 @@ fn fingerprint(dirs: &[PathBuf]) -> String {
     h.finalize().to_hex()[..16].to_string()
 }
 
-/// The tools on the process PATH, for `route`.
+/// The tools on the process PATH.
 pub fn load(cache_dir: Option<&Path>) -> Result<Vec<Tool>, JevifyError> {
     let path = std::env::var_os("PATH").unwrap_or_default();
     load_with(&path, cache_dir, Instant::now() + INDEX_TIMEOUT).map(|inventory| inventory.tools)

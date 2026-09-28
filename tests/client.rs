@@ -287,6 +287,153 @@ async fn http_statuses_map_to_exit_codes_and_kinds() {
 }
 
 #[tokio::test]
+async fn spending_errors_distinguish_quota_from_request_size_without_retries() {
+    use futures::TryStreamExt;
+    use jevify::config::Backend::{Classifier, Typesafe};
+    use serde_json::json;
+    for (backend, status, body, kind, exit, message, hint) in [
+        (
+            Typesafe,
+            402,
+            json!({"detail":{"error_type":"billing_error","message":"no available TypeSafe API credits"}}),
+            "quota_exhausted",
+            4,
+            "TypeSafe account has no credits",
+            "credits",
+        ),
+        (
+            Typesafe,
+            402,
+            json!({"code":"billing_error"}),
+            "quota_exhausted",
+            4,
+            "TypeSafe account has no credits",
+            "credits",
+        ),
+        (
+            Typesafe,
+            402,
+            json!({"detail":"no available TypeSafe API credits"}),
+            "quota_exhausted",
+            4,
+            "TypeSafe account has no credits",
+            "credits",
+        ),
+        (
+            Classifier,
+            429,
+            json!({"code":"free_ip_daily_budget","error":"budget spent"}),
+            "quota_exhausted",
+            4,
+            "00:00 UTC",
+            "$0.50",
+        ),
+        (
+            Classifier,
+            429,
+            json!({"detail":{"error_type":"free_ip_daily_budget"}}),
+            "quota_exhausted",
+            4,
+            "00:00 UTC",
+            "TYPESAFE_API_KEY_FILE",
+        ),
+        (
+            Classifier,
+            402,
+            json!({"code":"request_spending_limit","error":"The daily per-IP budget is spent"}),
+            "quota_exhausted",
+            4,
+            "00:00 UTC",
+            "$0.50",
+        ),
+        (
+            Classifier,
+            402,
+            json!({"message":"Daily IP budget exhausted"}),
+            "quota_exhausted",
+            4,
+            "00:00 UTC",
+            "TYPESAFE_API_KEY_FILE",
+        ),
+        (
+            Classifier,
+            402,
+            json!({"code":"request_spending_limit","message":"Daily budget exhausted for this IP"}),
+            "quota_exhausted",
+            4,
+            "00:00 UTC",
+            "$0.50",
+        ),
+        (
+            Classifier,
+            402,
+            json!({"code":"request_spending_limit","error":"Request exceeds $0.01 of provider cost"}),
+            "input_too_large",
+            6,
+            "$0.01",
+            "filter the input",
+        ),
+        (
+            Classifier,
+            402,
+            json!({"error_type":"request_spending_limit","message":"Request too expensive"}),
+            "input_too_large",
+            6,
+            "$0.01",
+            "filter the input",
+        ),
+        (
+            Classifier,
+            402,
+            json!({}),
+            "api_unavailable",
+            4,
+            "HTTP 402",
+            "retry later",
+        ),
+        (
+            Typesafe,
+            402,
+            json!({"message":"unknown refusal"}),
+            "api_unavailable",
+            4,
+            "HTTP 402",
+            "retry later",
+        ),
+    ] {
+        for batched in [false, true] {
+            let server = MockServer::start().await;
+            Mock::given(method("POST"))
+                .respond_with(
+                    ResponseTemplate::new(status)
+                        .insert_header("retry-after-ms", "0")
+                        .set_body_json(body.clone()),
+                )
+                .expect(1)
+                .mount(&server)
+                .await;
+            let mut cfg = common::config(&server);
+            cfg.backend = backend;
+            let client = Client::new(&cfg).unwrap();
+            let error = if batched {
+                client
+                    .ask_each(&["x".into()], &one_noul())
+                    .try_collect::<Vec<_>>()
+                    .await
+                    .unwrap_err()
+            } else {
+                client.ask(&json!("x"), &one_noul()).await.unwrap_err()
+            };
+            assert_eq!((error.kind(), error.exit().code()), (kind, exit), "{body}");
+            assert!(error.to_string().contains(message), "{error}");
+            assert!(error.hint().contains(hint), "{}", error.hint());
+            assert!(!error.hint().contains("20,000"));
+            assert_eq!(server.received_requests().await.unwrap().len(), 1, "{body}");
+        }
+    }
+}
+
+#[tokio::test]
 async fn a_429_is_retried_and_the_answer_is_cached() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))

@@ -15,6 +15,15 @@ fn usage_errors_are_exit_2_and_one_envelope_with_a_corrected_example() {
         (vec!["why", "-0"], None),
         (vec!["why", "--", "true"], None),
         (vec!["run", "x"], None),
+        (vec!["route", "x"], None),
+        (vec!["sort", "."], None),
+        (vec!["robot-docs"], None),
+        (vec!["init", "zsh"], None),
+        (vec!["init", "bash"], None),
+        (vec!["--format", "human", "capabilities"], None),
+        (vec!["--format", "json", "capabilities"], None),
+        (vec!["--format=jsonl", "capabilities"], None),
+        (vec!["--format", "toon", "capabilities"], None),
         (vec!["fill", "--nope", "--", "x"], None),
         (vec!["pick", "--from", "branch", "-0", "x"], None),
         (vec!["label", "bug"], None),
@@ -149,11 +158,24 @@ fn closed_stdout_is_normal_for_output_and_json_errors() {
 }
 
 #[test]
-fn toon_format_renders() {
-    let out = common::bin()
-        .args(["--format", "toon", "-t", "2", "is", "x"])
-        .output()
-        .unwrap();
-    let s = String::from_utf8(out.stdout).unwrap();
-    assert!(s.contains("ok: false"), "{s}");
+fn json_and_robot_emit_one_line_without_pricing_fields() {
+    for flag in ["--json", "--robot"] {
+        let out = common::bin()
+            .env("JEVIFY_PRICE_PER_MTOK", "not-a-price")
+            .args([flag, "capabilities"])
+            .output()
+            .unwrap();
+        assert!(out.status.success());
+        assert_eq!(String::from_utf8_lossy(&out.stdout).lines().count(), 1);
+        let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        assert!(v["meta"].get("cost_usd").is_none());
+        assert!(v["meta"]["telemetry"].get("cost_estimate").is_none());
+        assert!(
+            v["data"]["global_flags"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|flag| !flag.as_str().unwrap().starts_with("--format"))
+        );
+    }
 }

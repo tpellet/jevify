@@ -39,7 +39,10 @@ fn capabilities_publish_verbs_exit_codes_env_error_kinds_and_kinds() {
         let codes = command["exit"].as_array().unwrap();
         assert!(!codes.is_empty() && codes.iter().all(|code| code.is_u64()));
     }
-    assert_eq!(d["exit_codes"].as_array().unwrap().len(), 9);
+    assert_eq!(
+        d["exit_codes"].as_array().unwrap().len(),
+        jevify::exit::Exit::ALL.len()
+    );
     let env = d["env"].as_array().unwrap();
     assert!(env.iter().any(|e| e["name"] == "TYPESAFE_API_KEY"));
     assert!(env.iter().any(|e| e["name"] == "JEVIFY_CONFIG_DIR"));
@@ -156,9 +159,101 @@ async fn health_is_5_without_a_key_and_0_against_a_reachable_backend() {
 }
 
 #[test]
-fn robot_docs_topics() {
-    for t in ["guide", "commands", "exit-codes", "examples", "privacy"] {
-        common::bin().args(["robot-docs", t]).assert().success();
+fn init_agents_prints_one_screen_of_instructions_in_human_and_json() {
+    let human = common::bin().args(["init", "agents"]).output().unwrap();
+    assert!(human.status.success());
+    let text = String::from_utf8(human.stdout).unwrap();
+    assert!(text.contains("jevify capabilities --json"));
+    assert!(text.contains("JEVIFY_STATUS_FILE"));
+    assert!(text.lines().count() <= 25);
+    let out = common::bin()
+        .args(["init", "agents", "--robot"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let value: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(value["command"], "init");
+    assert_eq!(value["exit_code"], 0);
+    assert_eq!(value["data"]["script"], text);
+    assert_eq!(String::from_utf8(out.stdout).unwrap().lines().count(), 1);
+}
+
+/// The replacement for tool routing uses the caller's inventory, enriches finalists without
+/// executing them, and writes only the selected handle to human stdout.
+#[tokio::test(flavor = "multi_thread")]
+async fn tool_kind_uses_inventory_and_man_evidence_without_running_the_tool() {
+    use std::os::unix::fs::PermissionsExt;
+    let server = common::mock(common::FakeJev {
+        choose: |_, state, options| common::option_containing(state, options, "macho-inspect"),
+        noul: |_, _| 0.95,
+    })
+    .await;
+    let dir = tempfile::tempdir().unwrap().keep();
+    let inventory = dir.join("inventory.json");
+    std::fs::write(
+        &inventory,
+        r#"[{"name":"macho-inspect","summary":"inspect binaries"}]"#,
+    )
+    .unwrap();
+    for (name, body) in [
+        ("macho-inspect", "printf started > sentinel"),
+        (
+            "man",
+            "printf 'DESCRIPTION\\n    MAN-EVIDENCE: inspect Mach-O load commands.\\n'",
+        ),
+    ] {
+        let path = dir.join(name);
+        std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).unwrap();
     }
-    common::bin().args(["robot-docs", "nope"]).assert().code(2);
+    let mut command = common::jevify(&server);
+    command
+        .current_dir(&dir)
+        .env("PATH", &dir)
+        .env("JEVIFY_INVENTORY_FILE", &inventory);
+    let out = tokio::task::spawn_blocking(move || {
+        command
+            .args(["pick", "--from", "tool", "inspect Mach-O load commands"])
+            .output()
+            .unwrap()
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(out.stdout, b"macho-inspect\n");
+    assert!(!dir.join("sentinel").exists());
+    let requests = server.received_requests().await.unwrap();
+    assert!(
+        requests.iter().any(|request| {
+            request.method == "POST"
+                && String::from_utf8_lossy(&request.body).contains("MAN-EVIDENCE")
+        }),
+        "finalists must carry manual evidence"
+    );
+
+    for contents in [Some("[]"), Some("not json"), None] {
+        let path = if let Some(contents) = contents {
+            std::fs::write(&inventory, contents).unwrap();
+            inventory.clone()
+        } else {
+            dir.join("missing.json")
+        };
+        let out = common::bin()
+            .env("JEVIFY_INVENTORY_FILE", path)
+            .args(["pick", "--from", "tool", "inspect", "--json"])
+            .output()
+            .unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        let expected = if contents == Some("[]") { 3 } else { 6 };
+        assert_eq!(out.status.code(), Some(expected), "{value}");
+        assert_eq!(value["meta"]["requests"], 0);
+        if expected == 6 {
+            assert_eq!(value["error"]["kind"], "input");
+        }
+    }
 }

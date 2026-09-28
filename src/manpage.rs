@@ -5,17 +5,10 @@ use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
 static OVERSTRIKE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r".\x08").unwrap());
-const SYNOPSIS_MAX_CHARS: usize = 1000;
 /// One `man` render: a page is ready in well under a second; a hung formatter yields no text.
 const MAN_TIMEOUT: Duration = Duration::from_secs(5);
 /// The largest page kept; the sections read are near the top.
 const MAN_OUTPUT_CAP: usize = 4 * 1024 * 1024;
-
-/// Renders the man page without running the tool itself, even with `--help`.
-fn man_page(cmd: &str) -> Option<String> {
-    let path = std::env::var_os("PATH").unwrap_or_default();
-    man_page_within(cmd, &path, Instant::now() + MAN_TIMEOUT)
-}
 
 /// The page of `cmd` from the `man` on `path`, killed at `deadline` (no text then), stdin at
 /// `/dev/null`, output bounded.
@@ -53,39 +46,24 @@ pub fn section(page: &str, name: &str) -> Option<String> {
     (!s.is_empty()).then_some(s)
 }
 
-pub fn description(cmd: &str, max_chars: usize) -> Option<String> {
-    section(&man_page(cmd)?, "DESCRIPTION").map(|d| d.chars().take(max_chars).collect())
-}
-
-/// The tool's synopsis, bounded to 1000 characters. Call from a blocking worker.
-pub fn synopsis(cmd: &str) -> Option<String> {
-    synopsis_from_page(man_page(cmd).as_deref())
-}
-
-fn synopsis_from_page(page: Option<&str>) -> Option<String> {
-    section(page?, "SYNOPSIS").map(|s| s.chars().take(SYNOPSIS_MAX_CHARS).collect())
+/// Render only a finalist's manual, never the tool itself, within the lister's deadline.
+pub fn description_within(
+    cmd: &str,
+    path: &OsStr,
+    deadline: Instant,
+    max_chars: usize,
+) -> Option<String> {
+    if cmd.starts_with('-') {
+        return None;
+    }
+    let deadline = deadline.min(Instant::now() + MAN_TIMEOUT);
+    section(&man_page_within(cmd, path, deadline)?, "DESCRIPTION")
+        .map(|description| description.chars().take(max_chars).collect())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn the_synopsis_is_its_section_joined_or_nothing() {
-        let page = "NAME\n    tool - inspect files\nSYNOPSIS\n    tool [-v]\n        file ...\n\nDESCRIPTION\n    Inspect files.\n";
-        assert_eq!(
-            synopsis_from_page(Some(page)).as_deref(),
-            Some("tool [-v] file ...")
-        );
-        for page in [
-            "",
-            "NAME\n    tool\nDESCRIPTION\n    inspect files\n",
-            "SYNOPSIS\n\nDESCRIPTION\n    inspect files\n",
-        ] {
-            assert_eq!(synopsis_from_page(Some(page)), None);
-        }
-        assert_eq!(synopsis_from_page(None), None);
-    }
 
     fn fake_man(body: &str) -> std::path::PathBuf {
         use std::os::unix::fs::PermissionsExt;
@@ -121,10 +99,7 @@ mod tests {
             Instant::now() + Duration::from_secs(5),
         )
         .unwrap();
-        assert_eq!(
-            synopsis_from_page(Some(&page)).as_deref(),
-            Some("tool [-v]")
-        );
+        assert_eq!(section(&page, "SYNOPSIS").as_deref(), Some("tool [-v]"));
         // A failing `man` yields nothing, and an expired deadline runs none.
         let failing = fake_man("exit 1");
         assert_eq!(
