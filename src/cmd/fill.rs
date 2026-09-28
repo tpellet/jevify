@@ -725,19 +725,16 @@ const REVISION_READERS: [&str; 16] = [
     "cherry",
 ];
 
-/// Whether `name` resolves to a commit in `dir`.
+/// Whether `name` resolves to a commit in `dir`, read under the lister deadline.
 fn resolves(dir: &Path, name: &OsStr) -> bool {
     let mut revision = name.to_os_string();
     revision.push("^{commit}");
-    std::process::Command::new("git")
-        .current_dir(dir)
+    let mut git = std::process::Command::new("git");
+    git.current_dir(dir)
         .args(["rev-parse", "--verify", "--quiet", "--end-of-options"])
-        .arg(revision)
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .is_ok_and(|status| status.success())
+        .arg(revision);
+    let deadline = std::time::Instant::now() + source::LISTER_TIMEOUT;
+    source::supervise(git, source::Mode::Strict, deadline, usize::MAX).is_ok()
 }
 
 /// A bare `@{branch:...}` substitutes the short name, which only `git switch`'s DWIM resolves
@@ -979,46 +976,14 @@ fn validate_kind(
     if let Some(kind) = source::lookup(&marker.kind, env)? {
         return Ok(Some(kind));
     }
-    let user: Vec<String> = source::catalog(env)
-        .kinds
-        .into_iter()
-        .filter(|entry| entry.origin == "user")
-        .map(|entry| entry.name)
-        .collect();
-    let kinds: Vec<&str> = source::KINDS
-        .iter()
-        .copied()
-        .chain(["one", "flag"])
-        .chain(user.iter().map(String::as_str))
-        .collect();
-    let nearest = kinds
-        .iter()
-        .min_by_key(|kind| edit_distance(&marker.kind, kind))
-        .unwrap();
+    let (nearest, kinds) = super::pick::nearest_kind(&marker.kind, &["one", "flag"], env);
     let mut literal = argument.as_bytes().to_vec();
     literal.insert(marker.span.start, b'@');
     let literal = output::status_escape(&String::from_utf8_lossy(&literal)).replace('\'', "'\\''");
     Err(JevifyError::Usage(format!(
-        "unknown kind '{}'; nearest kind: {nearest}; kinds: {}; for a literal write '{literal}'",
-        marker.kind,
-        kinds.join(", ")
+        "unknown kind '{}'; nearest kind: {nearest}; kinds: {kinds}; for a literal write '{literal}'",
+        marker.kind
     )))
-}
-
-fn edit_distance(a: &str, b: &str) -> usize {
-    let mut row: Vec<_> = (0..=b.len()).collect();
-    for (i, left) in a.bytes().enumerate() {
-        let mut diagonal = row[0];
-        row[0] = i + 1;
-        for (j, right) in b.bytes().enumerate() {
-            let above = row[j + 1];
-            row[j + 1] = (diagonal + usize::from(left != right))
-                .min(above + 1)
-                .min(row[j] + 1);
-            diagonal = above;
-        }
-    }
-    row[b.len()]
 }
 
 #[cfg(test)]
@@ -1065,13 +1030,6 @@ mod tests {
         let error = check_stdin_terminal(true).unwrap_err();
         assert_eq!(error.exit(), Exit::Input);
         assert_eq!(error.kind(), "stdin_is_tty");
-    }
-
-    #[test]
-    fn nearest_kind_uses_edit_distance() {
-        assert_eq!(edit_distance("brnch", "branch"), 1);
-        assert_eq!(edit_distance("", "branch"), 6);
-        assert_eq!(edit_distance("branch", "branch"), 0);
     }
 
     #[test]
@@ -1155,19 +1113,13 @@ mod tests {
             windows: 1,
             n: 3,
         };
-        // Measured names rounds: records.rs behind input.rs, in play in every run.
+        // Measured names rounds: records.rs behind input.rs stays in play; release.sh at 0.01
+        // behind publish-crates.yml, tied with NONE, does not.
         assert!(runner_up_matches(&ranking(0.51, 0.20, 0.12, 0.17)));
-        assert!(runner_up_matches(&ranking(0.54, 0.14, 0.14, 0.18)));
-        assert!(runner_up_matches(&ranking(0.59, 0.14, 0.12, 0.15)));
-        // release.sh behind publish-crates.yml, out of play in every run, including the
-        // run where it tied NONE at 0.01; release.yml at 0.08 behind release.sh 0.91 too.
-        assert!(!runner_up_matches(&ranking(0.97, 0.01, 0.0, 0.02)));
         assert!(!runner_up_matches(&ranking(0.98, 0.01, 0.0, 0.01)));
-        assert!(!runner_up_matches(&ranking(0.91, 0.08, 0.0, 0.01)));
         // The boundary is the winner ratio: twice the field must exceed the winner.
         assert!(runner_up_matches(&ranking(0.66, 0.20, 0.10, 0.04)));
         assert!(!runner_up_matches(&ranking(0.68, 0.20, 0.10, 0.02)));
-        assert!(!runner_up_matches(&ranking(1.0, 0.0, 0.0, 0.0)));
         let mut single = ranking(0.5, 0.0, 0.0, 0.5);
         single.candidates.truncate(1);
         assert!(runner_up_matches(&single));

@@ -249,25 +249,9 @@ async fn from_kind(
     let env = source::Env::from_process(source::LISTER_TIMEOUT);
     // Coded kinds and shipped recipes, then the user's kinds.jsonl for a name in neither.
     let Some(kind) = source::lookup(name, &env)? else {
-        let user: Vec<String> = source::catalog(&env)
-            .kinds
-            .into_iter()
-            .filter(|entry| entry.origin == "user")
-            .map(|entry| entry.name)
-            .collect();
-        let kinds: Vec<&str> = source::KINDS
-            .iter()
-            .copied()
-            .chain(user.iter().map(String::as_str))
-            .collect();
-        let nearest = kinds
-            .iter()
-            .min_by_key(|candidate| distance(name, candidate))
-            .copied()
-            .unwrap_or("branch");
+        let (nearest, kinds) = nearest_kind(name, &[], &env);
         return Err(JevifyError::Usage(format!(
-            "unknown kind {name:?}; did you mean {nearest:?}? kinds: {}",
-            kinds.join(", ")
+            "unknown kind {name:?}; did you mean {nearest:?}? kinds: {kinds}"
         )));
     };
     if top == 0 {
@@ -435,6 +419,24 @@ async fn working_directory_files() -> Result<Vec<u8>, JevifyError> {
     Ok(bytes)
 }
 
+/// For the error of an unknown kind: the nearest kind by [`distance`], and every kind joined
+/// with commas, the coded and shipped ones, then `extra`, then the user's recipes.
+pub(crate) fn nearest_kind(name: &str, extra: &[&str], env: &source::Env) -> (String, String) {
+    let (user, built_in): (Vec<_>, Vec<_>) = source::catalog(env)
+        .kinds
+        .into_iter()
+        .partition(|entry| entry.origin == "user");
+    let kinds: Vec<String> = built_in
+        .into_iter()
+        .map(|entry| entry.name)
+        .chain(extra.iter().map(|kind| (*kind).to_owned()))
+        .chain(user.into_iter().map(|entry| entry.name))
+        .collect();
+    let nearest = kinds.iter().min_by_key(|kind| distance(name, kind));
+    (nearest.cloned().unwrap_or_default(), kinds.join(", "))
+}
+
+/// The Levenshtein distance in characters, for every "did you mean" of jevify.
 pub(crate) fn distance(a: &str, b: &str) -> usize {
     let mut row: Vec<_> = (0..=b.chars().count()).collect();
     for (i, left) in a.chars().enumerate() {

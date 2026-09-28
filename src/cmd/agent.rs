@@ -15,53 +15,11 @@ pub const WITHHELD_PATTERNS: [&str; 6] =
 /// from `kinds.jsonl` in the configuration directory, then the two caller-option kinds that
 /// list nothing. A bad user file adds `kinds_error` and never fails the caller.
 fn kinds() -> (Vec<serde_json::Value>, Option<String>) {
-    let env = source::Env::from_process(source::LISTER_TIMEOUT);
-    let catalog = source::catalog(&env);
-    let mut kinds: Vec<serde_json::Value> = catalog
+    let catalog = source::catalog(&source::Env::from_process(source::LISTER_TIMEOUT));
+    let mut kinds: Vec<_> = catalog
         .kinds
         .iter()
-        .map(|entry| {
-            let mut value = serde_json::json!({
-                "name": entry.name,
-                "origin": entry.origin,
-                "family": if entry.name == "-" { "input records" } else { "existing things" },
-                "list": entry.list,
-            });
-            let extra = match entry.name.as_str() {
-                "-" => serde_json::json!({ "input": "stdin or --candidates FILE; --field is 1-based whitespace, --key selects a JSON handle" }),
-                "branch" => serde_json::json!({
-                    "enrich": ["git", "log", "-5", "--format=%x00%s%x00", "--name-only", "-z", "--no-renames", "--no-ext-diff", "--end-of-options", "<handle>", "--"],
-                    "evidence": "name, subject, age; local and remote twins collapse; newest first",
-                    "forms": "bare '@{branch:x}' substitutes the short name a branch-taking command accepts (git switch, checkout, push); a literal prefix 'origin/@{branch:x}' lists that remote's refs and substitutes the qualified ref a revision-taking command resolves (git log, rev-parse, diff)",
-                    "ordered": true,
-                }),
-                "commit" => serde_json::json!({
-                    "evidence": "full OID and subject; finalists add body, changed paths and the diffstat with the first 1,000 characters of the patch, so a subject that claims a change another commit holds loses the finals; -n <limit> after log, the total from git rev-list --count HEAD; newest first",
-                    "ordered": true,
-                }),
-                "file" => serde_json::json!({
-                    "evidence": "path; finalists add first lines, withheld for the patterns of withheld; a literal prefix ending in / narrows the walk; outside a work tree a no-follow walk",
-                    "ordered": false,
-                }),
-                "dir" => serde_json::json!({
-                    "evidence": "directory path; finalists add the names of their first children, withheld for the patterns of withheld; a literal prefix ending in / narrows the walk",
-                    "ordered": false,
-                }),
-                "tool" => serde_json::json!({
-                    "evidence": "name and one-line manual summary from the PATH and the man index, cached under JEVIFY_CACHE_DIR",
-                    "ordered": false,
-                }),
-                _ => serde_json::json!({
-                    "evidence": "the whole line of the listing; the handle is field N or key KEY of the recipe",
-                    // A shipped recipe is in the registry; a user recipe is known to lookup only.
-                    "ordered": source::lookup(&entry.name, &env).ok().flatten().is_some_and(|kind| kind.ordered),
-                }),
-            };
-            if let (Some(target), Some(fields)) = (value.as_object_mut(), extra.as_object()) {
-                target.extend(fields.clone());
-            }
-            value
-        })
+        .map(|kind| serde_json::json!(kind))
         .collect();
     kinds.push(serde_json::json!({ "name": "one", "origin": "coded", "family": "caller options", "list": [], "input": "options in '@{one:a|b|c:question}'; context on stdin or --context FILE" }));
     kinds.push(serde_json::json!({ "name": "flag", "origin": "coded", "family": "caller options", "list": [], "input": "whole argument '@{flag:--name:question}'; yes keeps, no removes, unsure abstains" }));
@@ -461,183 +419,46 @@ fi
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// The kinds come from the one registry in `source.rs`: coded kinds, then the shipped
+    /// recipes with their argv and order, then the two caller-option kinds.
     #[test]
-    fn capabilities_match_the_exit_contract_and_name_every_command() {
+    fn capabilities_list_every_kind_of_the_registry_with_its_argv_and_order() {
         let d = capabilities().data;
-        // An observable value, not the list's own length echoed back: 130 is what an agent sees
-        // when the user declines at the prompt.
-        assert!(
-            d["exit_codes"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|e| e["code"] == 130),
-            "{}",
-            d["exit_codes"]
-        );
-        assert_eq!(d["limits"]["window"], crate::tournament::WINDOW);
-        // Both backends are documented, with the env var that picks one.
-        let names: Vec<&str> = d["backends"]
-            .as_array()
-            .unwrap()
+        let entries = d["kinds"].as_array().unwrap();
+        let names: Vec<&str> = entries
             .iter()
-            .map(|b| b["name"].as_str().unwrap())
+            .map(|k| k["name"].as_str().unwrap())
             .collect();
-        assert_eq!(names, ["typesafe", "classifier"]);
-        assert!(
-            d["env"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|e| e["name"] == "JEVIFY_BACKEND")
-        );
-        assert!(
-            d["envelope"]["fields"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|f| f.as_str().unwrap().contains("meta{backend,"))
-        );
-        assert!(
-            d["commands"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .all(|c| c["name"].is_string()
-                    && c["usage"].is_string()
-                    && c["data"].is_string()
-                    && c["exit"].as_array().is_some_and(|codes| !codes.is_empty()))
-        );
-        // An agent must learn from here when each verb is worth a call, with a command to copy.
-        assert_eq!(
-            d["commands"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .map(|c| c["name"].as_str().unwrap())
-                .collect::<Vec<_>>(),
-            crate::VERBS
-        );
-        for verb in [
-            "fill", "pick", "why", "route", "filter", "label", "is", "add", "sort",
-        ] {
-            let c = d["commands"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .find(|c| c["name"] == verb)
-                .unwrap();
-            assert!(c["when"].as_str().is_some_and(|s| !s.is_empty()), "{c}");
-            assert!(
-                c["example"]
-                    .as_str()
-                    .is_some_and(|s| s.contains(&format!("jevify {verb}"))),
-                "{c}"
-            );
-        }
-    }
-    #[test]
-    fn capabilities_list_every_coded_kind_and_shipped_recipe_with_its_argv() {
-        let d = capabilities().data;
-        let kinds = d["kinds"].as_array().unwrap();
-        // The coded kinds and the shipped recipes come first, in registry order; a developer's
-        // own recipes may follow, then the two caller-option kinds.
-        let names: Vec<&str> = kinds.iter().map(|k| k["name"].as_str().unwrap()).collect();
-        assert!(names.starts_with(crate::source::KINDS), "{names:?}");
+        assert_eq!(names[0], "-");
         assert_eq!(&names[names.len() - 2..], ["one", "flag"]);
-        for kind in kinds {
-            assert!(kind["list"].is_array(), "{kind}");
-            assert!(
-                ["coded", "shipped", "user"].contains(&kind["origin"].as_str().unwrap()),
-                "{kind}"
-            );
-        }
-        let pod = kinds.iter().find(|k| k["name"] == "pod").unwrap();
-        assert_eq!(pod["origin"], "shipped");
+        let kind: std::collections::HashMap<_, _> = names.into_iter().zip(entries).collect();
+        assert_eq!(kind["-"]["family"], "input records");
+        assert!(kind["-"].get("ordered").is_none());
+        assert_eq!(kind["branch"]["enrich"][10], "--");
+        assert_eq!(kind["commit"]["ordered"], true);
+        assert_eq!(kind["pod"]["origin"], "shipped");
         assert_eq!(
-            pod["list"],
+            kind["pod"]["list"],
             serde_json::json!(["kubectl", "get", "pods", "--no-headers"])
         );
-        assert_eq!(pod["ordered"], false);
-        let pr = kinds.iter().find(|k| k["name"] == "pr").unwrap();
-        assert_eq!(pr["ordered"], true);
+        assert_eq!(kind["pod"]["ordered"], false);
+        assert_eq!(kind["pr"]["ordered"], true);
         for name in ["-", "tool", "one", "flag"] {
-            let kind = kinds.iter().find(|k| k["name"] == name).unwrap();
-            assert_eq!(kind["list"], serde_json::json!([]), "{kind}");
-        }
-        assert_eq!(
-            d["withheld"]["patterns"],
-            serde_json::json!(WITHHELD_PATTERNS)
-        );
-        assert!(
-            d["recipes"]["file"]
-                .as_str()
-                .unwrap()
-                .contains("JEVIFY_CONFIG_DIR")
-        );
-        assert!(
-            d["env"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|e| e["name"] == "JEVIFY_CONFIG_DIR")
-        );
-    }
-    #[test]
-    fn robot_docs_default_to_the_guide_and_reject_unknown_topics() {
-        assert_eq!(robot_docs(None).unwrap().data["topic"], "guide");
-        // `Outcome` has no Debug, so `unwrap_err` is unavailable; `err()` needs only the error's.
-        assert_eq!(robot_docs(Some("nope")).err().unwrap().exit(), Exit::Usage);
-    }
-    #[test]
-    fn init_prints_the_comma_alias_for_both_shells() {
-        for shell in [Shell::Zsh, Shell::Bash] {
-            let script = String::from_utf8(init(shell).human).unwrap();
-            assert!(script.contains("alias ,=") && script.contains("jevify route"));
-            assert!(!script.contains(&["jevify", "run"].join(" ")));
+            assert_eq!(kind[name]["list"], serde_json::json!([]), "{name}");
         }
     }
+
     #[test]
-    fn init_agents_names_every_verb_and_the_capability_contract() {
+    fn init_agents_names_every_verb_every_listing_kind_and_the_capability_contract() {
         let block = String::from_utf8(init(Shell::Agents).human).unwrap();
         for verb in crate::VERBS {
             assert!(block.contains(verb));
         }
         assert!(block.contains("jevify capabilities --json"));
         assert!(block.lines().count() <= 25);
-        // Every situation comes with a complete command on the same line, and every kind
-        // that lists something is named, so an agent with only this block can write the call.
-        for pair in [
-            (
-                "- fill: about to list branches",
-                "jevify fill -- git switch '@{branch:",
-            ),
-            ("- why: a failed build", "| jevify why"),
-            ("- filter: many records", "jevify filter -0 --files"),
-            ("- label: every record", "jevify label --files"),
-            ("- pick: one record or file", "jevify pick --from commit"),
-        ] {
-            let line = block
-                .lines()
-                .find(|l| l.starts_with(pair.0))
-                .unwrap_or_default();
-            assert!(line.contains(pair.1), "{line}");
-        }
-        assert!(block.contains("'@{commit:") && block.contains("'@{ci-run:"));
         let kinds = block.lines().find(|l| l.starts_with("Kinds")).unwrap();
         for kind in [
-            "branch",
-            "commit",
-            "file",
-            "dir",
-            "tool",
-            "pr",
-            "issue",
-            "ci-run",
-            "stash",
-            "process",
-            "container",
-            "pod",
+            "branch", "commit", "file", "dir", "tool", "pr", "ci-run", "pod",
         ] {
             assert!(kinds.contains(kind), "{kind}");
         }

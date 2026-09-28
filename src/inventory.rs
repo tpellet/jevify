@@ -3,11 +3,10 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashSet};
 use std::ffi::OsStr;
-use std::io::Read;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-use std::sync::{LazyLock, mpsc};
+use std::process::Command;
+use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -25,7 +24,6 @@ pub struct Inventory {
 }
 
 const INDEX_TIMEOUT: Duration = Duration::from_secs(20);
-const READER_GRACE: Duration = Duration::from_millis(200);
 /// The bound on one child's stdout: `manpath` is a line, a man index is a few megabytes.
 const INDEX_OUTPUT_CAP: usize = 64 * 1024 * 1024;
 
@@ -71,57 +69,11 @@ fn executables(dirs: &[PathBuf]) -> HashSet<String> {
     set
 }
 
-/// The stdout of a command that exits before the deadline, whatever its status. A command
-/// still running at the deadline is killed and yields nothing, so a slow `man` never hangs the
-/// caller; a reader that has not reached EOF 200 ms after the exit yields nothing either.
-/// stdin is `/dev/null`; only the first `cap` bytes of stdout are kept, the rest is drained so
-/// a chatty child never blocks on a full pipe. Also runs `man` and `pdftotext` for their
-/// callers, which is why it is crate-visible.
-pub(crate) fn output_within(
-    mut command: Command,
-    deadline: Instant,
-    cap: usize,
-) -> Option<Vec<u8>> {
-    if Instant::now() >= deadline {
-        return None;
-    }
-    command
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null());
-    let mut child = command.spawn().ok()?;
-    let mut stdout = child.stdout.take()?;
-    let (tx, rx) = mpsc::channel();
-    std::thread::spawn(move || {
-        let mut bytes = Vec::new();
-        let mut buffer = [0u8; 8192];
-        let result = loop {
-            match stdout.read(&mut buffer) {
-                Ok(0) => break Ok(bytes),
-                Ok(n) => {
-                    let room = cap.saturating_sub(bytes.len()).min(n);
-                    bytes.extend_from_slice(&buffer[..room]);
-                }
-                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
-                Err(e) => break Err(e),
-            }
-        };
-        let _ = tx.send(result);
-    });
-    loop {
-        match child.try_wait() {
-            Ok(Some(_)) => break,
-            Ok(None) if Instant::now() < deadline => std::thread::sleep(
-                Duration::from_millis(20).min(deadline.saturating_duration_since(Instant::now())),
-            ),
-            _ => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return None;
-            }
-        }
-    }
-    rx.recv_timeout(READER_GRACE).ok()?.ok()
+/// The best-effort stdout of a command (`source::Mode::BestEffort`): nothing from a command
+/// still running at the deadline, so a slow `man` never hangs the caller. Also runs `man` and
+/// `pdftotext` for their callers, which is why it is crate-visible.
+pub(crate) fn output_within(command: Command, deadline: Instant, cap: usize) -> Option<Vec<u8>> {
+    crate::source::supervise(command, crate::source::Mode::BestEffort, deadline, cap).ok()
 }
 
 fn whatis_text(path: &OsStr, deadline: Instant) -> String {
@@ -326,7 +278,7 @@ mod tests {
         let budget = Duration::from_millis(300);
         let inventory = load_with(dir.as_os_str(), Some(&cache), start + budget).unwrap();
         assert!(
-            start.elapsed() < budget + READER_GRACE,
+            start.elapsed() < budget + crate::source::READER_GRACE,
             "{:?}",
             start.elapsed()
         );
@@ -337,23 +289,5 @@ mod tests {
         assert_eq!(std::fs::read_dir(&cache).unwrap().count(), 0);
         // An expired deadline runs no command at all.
         assert!(output_within(Command::new("man"), Instant::now(), 1024).is_none());
-    }
-
-    #[test]
-    fn output_is_capped_and_the_rest_drained() {
-        let dir = bin_dir(0);
-        script(&dir, "chatty", "yes | head -c 200000");
-        let mut command = Command::new(dir.join("chatty"));
-        command.env("PATH", "/usr/bin:/bin");
-        let deadline = Instant::now() + Duration::from_secs(5);
-        let out = output_within(command, deadline, 100).unwrap();
-        assert_eq!(out.len(), 100);
-        assert!(out.iter().all(|b| *b == b'y' || *b == b'\n'));
-        let mut command = Command::new(dir.join("chatty"));
-        command.env("PATH", "/usr/bin:/bin");
-        assert_eq!(
-            output_within(command, deadline, usize::MAX).unwrap().len(),
-            200_000
-        );
     }
 }

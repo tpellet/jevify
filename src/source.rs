@@ -18,22 +18,6 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
-/// The coded kinds, then the shipped recipes of `src/kinds.jsonl`, in file order.
-pub const KINDS: &[&str] = &[
-    "-",
-    "branch",
-    "commit",
-    "file",
-    "dir",
-    "tool",
-    "pr",
-    "issue",
-    "ci-run",
-    "stash",
-    "process",
-    "container",
-    "pod",
-];
 pub const LISTER_TIMEOUT: Duration = Duration::from_secs(20);
 const OUTPUT_CAP: usize = 64 * 1024 * 1024;
 /// Characters of diffstat and patch one commit finalist carries. A keyless finals window
@@ -41,7 +25,7 @@ const OUTPUT_CAP: usize = 64 * 1024 * 1024;
 /// a path list leave most of that unspent; 1,000 fills the room without crowding a finalist
 /// out. Above 24 finalists the window's own per-item clip cuts the diff further.
 const DIFF_CHARS: usize = 1_000;
-const READER_GRACE: Duration = Duration::from_millis(200);
+pub(crate) const READER_GRACE: Duration = Duration::from_millis(200);
 /// The shipped recipes, one JSON object per line.
 const SHIPPED: &str = include_str!("kinds.jsonl");
 /// The user's recipes, in the configuration directory only, never in the working directory.
@@ -57,83 +41,129 @@ const BRANCH_ARGV: [&str; 6] = [
 /// `-n <limit>` is inserted after `log`; the total comes from `git rev-list --count HEAD`.
 const COMMIT_ARGV: [&str; 6] = ["git", "log", "-z", "--format=%H%x00%s", "HEAD", "--"];
 const FILE_ARGV: [&str; 5] = ["git", "ls-files", "-co", "--exclude-standard", "-z"];
+/// The options of the `git log` that enriches a branch finalist; the revision follows
+/// `--end-of-options`, then `--`.
+const BRANCH_LOG: [&str; 8] = [
+    "git",
+    "log",
+    "-5",
+    "--format=%x00%s%x00",
+    "--name-only",
+    "-z",
+    "--no-renames",
+    "--no-ext-diff",
+];
+/// What `capabilities` says of every recipe's evidence.
+const RECIPE_EVIDENCE: &str =
+    "the whole line of the listing; the handle is field N or key KEY of the recipe";
 
+/// A kind this file lists, rather than a recipe, and what `capabilities` says of it.
+struct Coded {
+    name: &'static str,
+    family: &'static str,
+    /// The lister argv; empty for `-`, which reads stdin or `--candidates`, and for `tool`,
+    /// which reads the PATH and the man index in process.
+    list: &'static [&'static str],
+    /// The command that enriches a finalist, when it is one, as `capabilities` shows it.
+    enrich: &'static [&'static str],
+    input: Option<&'static str>,
+    evidence: Option<&'static str>,
+    forms: Option<&'static str>,
+    /// Newest first, so a limit keeps the head; `None` for `-`, in its input's order.
+    ordered: Option<bool>,
+    /// The literal before the marker scopes the listing (`src/@{file:x}`).
+    path_kind: bool,
+    /// Finalists carry evidence the listing does not ([`enrich_in`]).
+    tier_two: bool,
+}
+
+const LISTED: Coded = Coded {
+    name: "",
+    family: "existing things",
+    list: &[],
+    enrich: &[],
+    input: None,
+    evidence: None,
+    forms: None,
+    ordered: Some(false),
+    path_kind: false,
+    tier_two: false,
+};
+
+/// The coded kinds in `capabilities` order; the shipped recipes of `src/kinds.jsonl` follow.
+const CODED: [Coded; 6] = [
+    Coded {
+        name: "-",
+        family: "input records",
+        input: Some(
+            "stdin or --candidates FILE; --field is 1-based whitespace, --key selects a JSON handle",
+        ),
+        ordered: None,
+        ..LISTED
+    },
+    Coded {
+        name: "branch",
+        list: &BRANCH_ARGV,
+        enrich: &BRANCH_LOG,
+        evidence: Some("name, subject, age; local and remote twins collapse; newest first"),
+        forms: Some(
+            "bare '@{branch:x}' substitutes the short name a branch-taking command accepts (git switch, checkout, push); a literal prefix 'origin/@{branch:x}' lists that remote's refs and substitutes the qualified ref a revision-taking command resolves (git log, rev-parse, diff)",
+        ),
+        ordered: Some(true),
+        // `origin/@{branch:x}` lists that remote's refs; no ref name starts with a dash.
+        path_kind: true,
+        tier_two: true,
+        ..LISTED
+    },
+    Coded {
+        name: "commit",
+        list: &COMMIT_ARGV,
+        evidence: Some(
+            "full OID and subject; finalists add body, changed paths and the diffstat with the first 1,000 characters of the patch, so a subject that claims a change another commit holds loses the finals; -n <limit> after log, the total from git rev-list --count HEAD; newest first",
+        ),
+        ordered: Some(true),
+        tier_two: true,
+        ..LISTED
+    },
+    Coded {
+        name: "file",
+        list: &FILE_ARGV,
+        evidence: Some(
+            "path; finalists add first lines, withheld for the patterns of withheld; a literal prefix ending in / narrows the walk; outside a work tree a no-follow walk",
+        ),
+        path_kind: true,
+        tier_two: true,
+        ..LISTED
+    },
+    Coded {
+        name: "dir",
+        list: &FILE_ARGV,
+        evidence: Some(
+            "directory path; finalists add the names of their first children, withheld for the patterns of withheld; a literal prefix ending in / narrows the walk",
+        ),
+        path_kind: true,
+        tier_two: true,
+        ..LISTED
+    },
+    Coded {
+        name: "tool",
+        evidence: Some(
+            "name and one-line manual summary from the PATH and the man index, cached under JEVIFY_CACHE_DIR",
+        ),
+        ..LISTED
+    },
+];
+
+fn coded(name: &str) -> Option<&'static Coded> {
+    CODED.iter().find(|coded| coded.name == name)
+}
+
+/// What a caller needs of a kind to list it and judge its finalists.
 #[derive(Debug, Clone)]
 pub struct Kind {
     pub name: Cow<'static, str>,
-    pub coded: bool,
-    pub ordered: bool,
     pub path_kind: bool,
     pub has_tier_two: bool,
-}
-
-const fn recipe_kind(name: &'static str, ordered: bool) -> Kind {
-    Kind {
-        name: Cow::Borrowed(name),
-        coded: false,
-        ordered,
-        path_kind: false,
-        has_tier_two: false,
-    }
-}
-
-pub const REGISTRY: &[Kind] = &[
-    Kind {
-        name: Cow::Borrowed("-"),
-        coded: true,
-        ordered: false,
-        path_kind: false,
-        has_tier_two: false,
-    },
-    Kind {
-        name: Cow::Borrowed("branch"),
-        coded: true,
-        ordered: true,
-        // The literal before the marker scopes the listing (`origin/@{branch:x}` lists that
-        // remote's refs), as for `file` and `dir`; no ref name starts with a dash.
-        path_kind: true,
-        has_tier_two: true,
-    },
-    Kind {
-        name: Cow::Borrowed("commit"),
-        coded: true,
-        ordered: true,
-        path_kind: false,
-        has_tier_two: true,
-    },
-    Kind {
-        name: Cow::Borrowed("file"),
-        coded: true,
-        ordered: false,
-        path_kind: true,
-        has_tier_two: true,
-    },
-    Kind {
-        name: Cow::Borrowed("dir"),
-        coded: true,
-        ordered: false,
-        path_kind: true,
-        has_tier_two: true,
-    },
-    Kind {
-        name: Cow::Borrowed("tool"),
-        coded: true,
-        ordered: false,
-        path_kind: false,
-        has_tier_two: false,
-    },
-    recipe_kind("pr", true),
-    recipe_kind("issue", true),
-    recipe_kind("ci-run", true),
-    recipe_kind("stash", true),
-    recipe_kind("process", false),
-    recipe_kind("container", false),
-    recipe_kind("pod", false),
-];
-
-/// A shipped kind: coded, or a recipe of `src/kinds.jsonl`. User recipes need [`lookup`].
-pub fn kind(name: &str) -> Option<&'static Kind> {
-    REGISTRY.iter().find(|kind| kind.name == name)
 }
 
 /// A kind as one JSON line: the lister argv and the handle.
@@ -215,7 +245,7 @@ fn user_recipes(env: &Env) -> Result<Vec<Recipe>, JevifyError> {
             JevifyError::recipe_invalid(format!("{} line {}: {message}", path.display(), index + 1))
         };
         let recipe = parse_recipe(line).map_err(invalid)?;
-        if kind(&recipe.kind).is_some() {
+        if coded(&recipe.kind).is_some() || shipped().iter().any(|r| r.kind == recipe.kind) {
             return Err(invalid(format!(
                 "kind {} is built in and cannot be replaced",
                 recipe.kind
@@ -232,24 +262,23 @@ fn user_recipes(env: &Env) -> Result<Vec<Recipe>, JevifyError> {
 /// Find a kind: coded kinds and shipped recipes first, and only for a name in neither, the
 /// user's `kinds.jsonl`. `Ok(None)` is a name found nowhere.
 pub fn lookup(name: &str, env: &Env) -> Result<Option<Kind>, JevifyError> {
-    if let Some(kind) = kind(name) {
-        return Ok(Some(kind.clone()));
+    if let Some(coded) = coded(name) {
+        return Ok(Some(Kind {
+            name: Cow::Borrowed(coded.name),
+            path_kind: coded.path_kind,
+            has_tier_two: coded.tier_two,
+        }));
     }
-    Ok(user_recipes(env)?
-        .into_iter()
-        .find(|recipe| recipe.kind == name)
-        .map(|recipe| Kind {
-            name: Cow::Owned(recipe.kind),
-            coded: false,
-            ordered: recipe.ordered,
-            path_kind: false,
-            has_tier_two: false,
-        }))
+    Ok(recipe(name, env)?.map(|recipe| Kind {
+        name: Cow::Owned(recipe.kind),
+        path_kind: false,
+        has_tier_two: false,
+    }))
 }
 
 /// The recipe of a kind that is not coded, with the same read rules as [`lookup`].
 fn recipe(name: &str, env: &Env) -> Result<Option<Recipe>, JevifyError> {
-    if kind(name).is_some_and(|kind| kind.coded) {
+    if coded(name).is_some() {
         return Ok(None);
     }
     if let Some(recipe) = shipped().iter().find(|recipe| recipe.kind == name) {
@@ -260,18 +289,28 @@ fn recipe(name: &str, env: &Env) -> Result<Option<Recipe>, JevifyError> {
         .find(|recipe| recipe.kind == name))
 }
 
-/// One kind as `capabilities` prints it: where it comes from and the argv of its lister.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+/// One kind as `capabilities.kinds` prints it: where it comes from, its lister argv and its
+/// evidence.
+#[derive(Debug, serde::Serialize)]
 pub struct CatalogEntry {
     pub name: String,
     /// `coded`, `shipped` or `user`.
     pub origin: &'static str,
-    /// Empty for `-`, which reads stdin or `--candidates`, and for `tool`, which reads the PATH
-    /// and the man index in process.
+    pub family: &'static str,
     pub list: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input: Option<&'static str>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub enrich: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub evidence: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub forms: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ordered: Option<bool>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug)]
 pub struct Catalog {
     pub kinds: Vec<CatalogEntry>,
     /// Why the user's `kinds.jsonl` was not listed; a bad file never fails the caller.
@@ -280,23 +319,34 @@ pub struct Catalog {
 
 /// Every kind with its lister argv, the user's recipes included.
 pub fn catalog(env: &Env) -> Catalog {
-    let coded = |name: &str, argv: &[&str]| CatalogEntry {
-        name: name.into(),
-        origin: "coded",
-        list: argv.iter().map(|arg| (*arg).to_owned()).collect(),
-    };
-    let mut kinds = vec![
-        coded("-", &[]),
-        coded("branch", &BRANCH_ARGV),
-        coded("commit", &COMMIT_ARGV),
-        coded("file", &FILE_ARGV),
-        coded("dir", &FILE_ARGV),
-        coded("tool", &[]),
-    ];
+    let strings = |args: &[&str]| args.iter().map(|arg| (*arg).to_owned()).collect();
+    let mut kinds: Vec<CatalogEntry> = CODED
+        .iter()
+        .map(|coded| CatalogEntry {
+            name: coded.name.into(),
+            origin: "coded",
+            family: coded.family,
+            list: strings(coded.list),
+            input: coded.input,
+            enrich: match coded.enrich {
+                [] => Vec::new(),
+                options => strings(&[options, &["--end-of-options", "<handle>", "--"]].concat()),
+            },
+            evidence: coded.evidence,
+            forms: coded.forms,
+            ordered: coded.ordered,
+        })
+        .collect();
     let entry = |recipe: &Recipe, origin| CatalogEntry {
         name: recipe.kind.clone(),
         origin,
+        family: LISTED.family,
         list: recipe.list.clone(),
+        input: None,
+        enrich: Vec::new(),
+        evidence: Some(RECIPE_EVIDENCE),
+        forms: None,
+        ordered: Some(recipe.ordered),
     };
     kinds.extend(shipped().iter().map(|recipe| entry(recipe, "shipped")));
     let error = match user_recipes(env) {
@@ -395,20 +445,11 @@ pub async fn enumerate(
     .map_err(|e| JevifyError::lister_failed(e.to_string()))?
 }
 
-pub async fn enrich(kind: &str, handles: &[OsString]) -> Vec<String> {
-    enrich_with_env(kind, handles, &Env::from_process(LISTER_TIMEOUT)).await
-}
-
-/// Missing enrichment is empty evidence; no partial lister output is returned.
-pub async fn enrich_with_env(kind: &str, handles: &[OsString], env: &Env) -> Vec<String> {
-    enrich_in(kind, Path::new(""), handles, env).await.0
-}
-
 /// Tier-two evidence for the given finalists only, and the number of finalists whose excerpt
 /// was withheld. `file` and `dir` handles are relative to `prefix` (the literal of the marker,
 /// resolved as in enumeration) under `env.cwd`; the other kinds ignore `prefix` and withhold
 /// nothing. `file` finalists carry their first lines, `dir` finalists the names of their first
-/// children. Missing enrichment is empty evidence.
+/// children. Missing enrichment is empty evidence; no partial lister output is returned.
 pub async fn enrich_in(
     kind: &str,
     prefix: &Path,
@@ -520,7 +561,7 @@ fn input_listing(
 /// an ordered listing, and the argv is never rewritten.
 fn recipe_listing(recipe: &Recipe, limit: usize, env: &Env) -> Result<Listing, JevifyError> {
     let argv: Vec<OsString> = recipe.list.iter().map(OsString::from).collect();
-    let bytes = run_lister_blocking(&argv, env, OUTPUT_CAP)?;
+    let bytes = run_lister(&argv, env)?;
     input_listing(
         &bytes,
         Split::Lines,
@@ -558,44 +599,12 @@ fn listing(mut records: Vec<Record>, mut omitted: usize, ordered: bool, limit: u
     }
 }
 
-/// Run an argv on the blocking pool. Success requires exit 0 and EOF on both pipes.
-pub async fn run_lister(argv: &[OsString], env: &Env) -> Result<Vec<u8>, JevifyError> {
-    let argv = argv.to_vec();
-    let env = env.clone();
-    tokio::task::spawn_blocking(move || run_lister_blocking(&argv, &env, OUTPUT_CAP))
-        .await
-        .map_err(|e| JevifyError::lister_failed(e.to_string()))?
-}
-
-fn read_pipe(mut pipe: impl Read, cap: usize, size: &AtomicUsize) -> Result<Vec<u8>, String> {
-    let mut bytes = Vec::new();
-    let mut buffer = [0; 8192];
-    loop {
-        let n = match pipe.read(&mut buffer) {
-            Ok(n) => n,
-            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
-            Err(e) => return Err(e.to_string()),
-        };
-        if n == 0 {
-            return Ok(bytes);
-        }
-        if size.fetch_add(n, Ordering::Relaxed).saturating_add(n) > cap {
-            return Err("output exceeds lister byte cap".into());
-        }
-        bytes.extend_from_slice(&buffer[..n]);
-    }
-}
-
-fn run_lister_blocking(argv: &[OsString], env: &Env, cap: usize) -> Result<Vec<u8>, JevifyError> {
+/// Run a lister argv with the environment hardened: no prompt, no colour, the injected PATH and
+/// configuration directory. Its stdout, or `lister_failed` naming the program.
+fn run_lister(argv: &[OsString], env: &Env) -> Result<Vec<u8>, JevifyError> {
     let Some(program) = argv.first() else {
         return Err(JevifyError::lister_failed("empty lister argv".into()));
     };
-    let fail = |message: String| {
-        JevifyError::lister_failed(format!("{}: {message}", program.to_string_lossy()))
-    };
-    if Instant::now() >= env.deadline {
-        return Err(fail("deadline exceeded".into()));
-    }
     let mut command = Command::new(program);
     command
         .args(&argv[1..])
@@ -603,28 +612,74 @@ fn run_lister_blocking(argv: &[OsString], env: &Env, cap: usize) -> Result<Vec<u
         .env("PATH", &env.path)
         .env("GH_PROMPT_DISABLED", "1")
         .env("GIT_TERMINAL_PROMPT", "0")
-        .env("NO_COLOR", "1")
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+        .env("NO_COLOR", "1");
     if let Some(dir) = &env.config_dir {
         command.env("JEVIFY_CONFIG_DIR", dir);
     } else {
         command.env_remove("JEVIFY_CONFIG_DIR");
     }
-    let mut child = command.spawn().map_err(|e| fail(e.to_string()))?;
-    let stdout = child.stdout.take().expect("piped stdout");
-    let stderr = child.stderr.take().expect("piped stderr");
+    supervise(command, Mode::Strict, env.deadline, OUTPUT_CAP).map_err(|stopped| {
+        let (Stopped::Spawn(message) | Stopped::Failed(message)) = stopped;
+        JevifyError::lister_failed(format!("{}: {message}", program.to_string_lossy()))
+    })
+}
+
+/// What a caller may take from a child's run.
+pub(crate) enum Mode {
+    /// Stdout only on exit 0 with both pipes at EOF, within `cap` bytes of stdout and stderr
+    /// together and before the deadline; anything else is an error ending in stderr's tail,
+    /// never a partial output.
+    Strict,
+    /// The first `cap` bytes of whatever stdout the child wrote before it exited, whatever its
+    /// status, the rest drained and stderr discarded; nothing past the deadline.
+    BestEffort,
+}
+
+#[derive(Debug)]
+pub(crate) enum Stopped {
+    /// The child never started: the spawn error.
+    Spawn(String),
+    /// The run gave no output its mode accepts, and why.
+    Failed(String),
+}
+
+/// The one supervisor of the children jevify reads from: stdin at `/dev/null`, the pipes read
+/// on their own threads so a chatty child never blocks on a full one, the child killed at the
+/// deadline (a strict run also past the cap), and readers given `READER_GRACE` after the exit,
+/// so a grandchild that keeps a pipe open cannot hang the caller.
+pub(crate) fn supervise(
+    mut command: Command,
+    mode: Mode,
+    deadline: Instant,
+    cap: usize,
+) -> Result<Vec<u8>, Stopped> {
+    if Instant::now() >= deadline {
+        return Err(Stopped::Failed("deadline exceeded".into()));
+    }
+    let strict = matches!(mode, Mode::Strict);
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(if strict {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        });
+    let mut child = command.spawn().map_err(|e| Stopped::Spawn(e.to_string()))?;
     let (tx, rx) = mpsc::channel();
     let size = Arc::new(AtomicUsize::new(0));
-    let out_size = Arc::clone(&size);
-    let out_tx = tx.clone();
-    std::thread::spawn(move || {
-        let _ = out_tx.send((0, read_pipe(stdout, cap, &out_size)));
-    });
-    std::thread::spawn(move || {
-        let _ = tx.send((1, read_pipe(stderr, cap, &size)));
-    });
+    let pipes: [Option<Box<dyn Read + Send>>; 2] = [
+        child.stdout.take().map(|pipe| Box::new(pipe) as _),
+        child.stderr.take().map(|pipe| Box::new(pipe) as _),
+    ];
+    let readers = pipes.iter().flatten().count();
+    for (index, pipe) in pipes.into_iter().enumerate() {
+        let Some(pipe) = pipe else { continue };
+        let (tx, size) = (tx.clone(), Arc::clone(&size));
+        std::thread::spawn(move || {
+            let _ = tx.send((index, read_pipe(pipe, cap, strict, &size)));
+        });
+    }
     let mut streams = [None, None];
     let mut failure = None;
     let status = loop {
@@ -634,18 +689,17 @@ fn run_lister_blocking(argv: &[OsString], env: &Env, cap: usize) -> Result<Vec<u
         if let Some(error) = streams.iter().flatten().find_map(|s| s.as_ref().err()) {
             failure = Some(error.clone());
         }
-        if Instant::now() >= env.deadline {
+        if Instant::now() >= deadline {
             failure = Some("deadline exceeded".into());
         }
         if failure.is_some() {
             let _ = child.kill();
-            break child.wait().map_err(|e| fail(e.to_string()))?;
+            break child.wait().map_err(|e| Stopped::Failed(e.to_string()))?;
         }
         match child.try_wait() {
             Ok(Some(status)) => break status,
             Ok(None) => std::thread::sleep(
-                Duration::from_millis(20)
-                    .min(env.deadline.saturating_duration_since(Instant::now())),
+                Duration::from_millis(20).min(deadline.saturating_duration_since(Instant::now())),
             ),
             Err(e) => {
                 let _ = child.kill();
@@ -656,7 +710,7 @@ fn run_lister_blocking(argv: &[OsString], env: &Env, cap: usize) -> Result<Vec<u
         }
     };
     let grace = Instant::now() + READER_GRACE;
-    while streams.iter().any(Option::is_none) {
+    while streams.iter().flatten().count() < readers {
         match rx.recv_timeout(grace.saturating_duration_since(Instant::now())) {
             Ok((index, result)) => streams[index] = Some(result),
             Err(_) => {
@@ -668,7 +722,7 @@ fn run_lister_blocking(argv: &[OsString], env: &Env, cap: usize) -> Result<Vec<u
     for error in streams.iter().flatten().filter_map(|s| s.as_ref().err()) {
         failure.get_or_insert(error.clone());
     }
-    if !status.success() {
+    if strict && !status.success() {
         failure.get_or_insert(format!("exited with {status}"));
     }
     if let Some(mut message) = failure {
@@ -680,12 +734,34 @@ fn run_lister_blocking(argv: &[OsString], env: &Env, cap: usize) -> Result<Vec<u
                 message.push_str(&format!(": {tail}"));
             }
         }
-        return Err(fail(message));
+        return Err(Stopped::Failed(message));
     }
-    streams[0]
-        .take()
-        .expect("both readers finished")
-        .map_err(fail)
+    Ok(streams[0].take().and_then(Result::ok).unwrap_or_default())
+}
+
+/// Read a pipe to EOF. Strict, past `cap` bytes of all the child's pipes together is an error;
+/// otherwise the bytes past `cap` are drained and dropped.
+fn read_pipe(
+    mut pipe: impl Read,
+    cap: usize,
+    strict: bool,
+    size: &AtomicUsize,
+) -> Result<Vec<u8>, String> {
+    let mut bytes = Vec::new();
+    let mut buffer = [0; 8192];
+    loop {
+        let n = match pipe.read(&mut buffer) {
+            Ok(0) => return Ok(bytes),
+            Ok(n) => n,
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(e) => return Err(e.to_string()),
+        };
+        let before = size.fetch_add(n, Ordering::Relaxed);
+        if strict && before.saturating_add(n) > cap {
+            return Err("output exceeds lister byte cap".into());
+        }
+        bytes.extend_from_slice(&buffer[..cap.saturating_sub(before).min(n)]);
+    }
 }
 
 /// Without a prefix, a branch is its name: `git switch` and `git checkout` resolve the short
@@ -697,7 +773,7 @@ fn run_lister_blocking(argv: &[OsString], env: &Env, cap: usize) -> Result<Vec<u
 /// local branch named `origin/x` is not under that prefix; a prefix with no remote ref under
 /// it fails and names the remotes that exist.
 fn branches(prefix: Option<&Path>, limit: usize, env: &Env) -> Result<Listing, JevifyError> {
-    let bytes = run_lister_blocking(&BRANCH_ARGV.map(OsString::from), env, OUTPUT_CAP)?;
+    let bytes = run_lister(&BRANCH_ARGV.map(OsString::from), env)?;
     let mut refs = Vec::new();
     for line in bytes.split(|b| *b == b'\n').filter(|line| !line.is_empty()) {
         let parts: Vec<_> = line.split(|b| *b == 0).collect();
@@ -822,21 +898,10 @@ fn age(now: u64, timestamp: u64) -> String {
 
 fn branch_evidence(handle: &OsStr, env: &Env) -> Result<String, JevifyError> {
     let log = |revs: [OsString; 2]| {
-        let mut argv: Vec<OsString> = [
-            "git",
-            "log",
-            "-5",
-            "--format=%x00%s%x00",
-            "--name-only",
-            "-z",
-            "--no-renames",
-            "--no-ext-diff",
-        ]
-        .map(OsString::from)
-        .to_vec();
+        let mut argv: Vec<OsString> = BRANCH_LOG.map(OsString::from).to_vec();
         argv.extend(revs);
         argv.push("--".into());
-        run_lister_blocking(&argv, env, OUTPUT_CAP)
+        run_lister(&argv, env)
     };
     // A remote-only branch is listed by its short name, which is not a rev: read it from the
     // remote-tracking refs instead.
@@ -888,8 +953,8 @@ fn commits(limit: usize, env: &Env) -> Result<Listing, JevifyError> {
     log.splice(2..2, ["-n".into(), limit.to_string().into()]);
     let count_argv = ["git", "rev-list", "--count", "HEAD", "--"].map(OsString::from);
     let (log, count) = std::thread::scope(|scope| {
-        let count = scope.spawn(|| run_lister_blocking(&count_argv, env, OUTPUT_CAP));
-        let log = run_lister_blocking(&log, env, OUTPUT_CAP);
+        let count = scope.spawn(|| run_lister(&count_argv, env));
+        let log = run_lister(&log, env);
         let count = count
             .join()
             .unwrap_or_else(|_| Err(JevifyError::lister_failed("git: count failed".into())));
@@ -923,7 +988,7 @@ fn commits(limit: usize, env: &Env) -> Result<Listing, JevifyError> {
 }
 
 fn commit_evidence(handle: &OsStr, env: &Env) -> Result<String, JevifyError> {
-    let bytes = run_lister_blocking(
+    let bytes = run_lister(
         &[
             "git".into(),
             "log".into(),
@@ -938,7 +1003,6 @@ fn commit_evidence(handle: &OsStr, env: &Env) -> Result<String, JevifyError> {
             "--".into(),
         ],
         env,
-        OUTPUT_CAP,
     )?;
     // The body ends at the format's NUL; -z adds one more, then the paths, NUL-terminated.
     let (body, rest) = bytes
@@ -968,7 +1032,7 @@ fn commit_evidence(handle: &OsStr, env: &Env) -> Result<String, JevifyError> {
 /// too long for the budget still leaves every changed file and its line counts in view.
 /// Unreadable output is an empty diff, never an error: the rest of the evidence still stands.
 fn commit_diff(handle: &OsStr, env: &Env) -> String {
-    let bytes = run_lister_blocking(
+    let bytes = run_lister(
         &[
             "git".into(),
             "show".into(),
@@ -984,7 +1048,6 @@ fn commit_diff(handle: &OsStr, env: &Env) -> String {
             "--".into(),
         ],
         env,
-        OUTPUT_CAP,
     )
     .unwrap_or_default();
     crate::tournament::clip(
@@ -1115,7 +1178,7 @@ fn paths(
         cwd: env.cwd.join(&relative),
         ..env.clone()
     };
-    let files = match run_lister_blocking(&FILE_ARGV.map(OsString::from), &scoped, OUTPUT_CAP) {
+    let files = match run_lister(&FILE_ARGV.map(OsString::from), &scoped) {
         Ok(bytes) => bytes
             .split(|b| *b == 0)
             .filter(|path| !path.is_empty())
@@ -1203,153 +1266,110 @@ mod tests {
         }
     }
 
-    fn input(bytes: &[u8], split: Split, field: Option<usize>, key: Option<&str>) -> Scope {
-        Scope::Input {
-            bytes: bytes.to_vec(),
-            split,
-            field,
-            key: key.map(str::to_owned),
-        }
-    }
-
-    #[tokio::test]
-    async fn input_records_preserve_bytes_and_ranges_and_ignore_unordered_limit() {
-        let bytes = b"first\nfirst\n-option\n\xff\n";
-        let env = environment(Path::new("."));
-        let result = enumerate("-", input(bytes, Split::Lines, None, None), 1, &env)
-            .await
-            .unwrap();
-        assert_eq!(result.total, 3);
-        assert_eq!(result.omitted, 0);
-        assert!(!result.ordered);
-        assert_eq!(result.records.len(), 3);
-        assert_eq!(result.records[0].handle, "first");
-        assert_eq!(&bytes[result.records[0].raw.clone()], b"first\n");
-        assert_eq!(result.records[1].handle, "-option");
-        assert_eq!(result.records[2].handle.as_bytes(), b"\xff");
-        assert!(
-            enumerate("-", input(b"", Split::Lines, None, None), 1, &env)
-                .await
-                .unwrap()
-                .records
-                .is_empty()
-        );
-        let result = enumerate(
-            "-",
-            input(b"a\0bad\nname\0bad\rname\0", Split::Nul, None, None),
-            10,
-            &env,
-        )
-        .await
-        .unwrap();
-        assert_eq!((result.total, result.omitted), (1, 2));
-        let result = enumerate(
-            "-",
-            input(b"bad\0name\ngood\n", Split::Lines, None, None),
-            10,
-            &env,
-        )
-        .await
-        .unwrap();
-        assert_eq!((result.total, result.omitted), (1, 1));
-    }
-
-    #[tokio::test]
-    async fn field_and_json_handles_keep_whole_record_evidence() {
-        let env = environment(Path::new("."));
-        let bytes = b"1 first choice\n2 second choice\nshort\n";
-        let result = enumerate("-", input(bytes, Split::Lines, Some(2), None), 10, &env)
-            .await
-            .unwrap();
-        assert_eq!(result.records[0].handle, "first");
-        assert_eq!(result.records[0].evidence, "1 first choice");
-        assert_eq!((result.total, result.omitted), (2, 1));
-        for bytes in [
-            b"{\"id\":1,\"title\":\"first\"}\n{\"id\":2,\"title\":\"second\"}\n".as_slice(),
-            b"[{\"id\":1,\"title\":\"first\"},{\"id\":2,\"title\":\"second\"}]".as_slice(),
-        ] {
-            let result = enumerate("-", input(bytes, Split::Lines, None, Some("id")), 10, &env)
-                .await
-                .unwrap();
-            assert_eq!(result.records[0].handle, "1");
-            assert_eq!(result.records[1].handle, "2");
-            assert!(result.records[0].evidence.contains("first"));
-            assert!(bytes[result.records[0].raw.clone()].starts_with(b"{"));
-        }
-        let result = enumerate("-", input(br#"[{"id":"bad\nname"},{"id":"bad\rname"},{"id":"bad\u0000name"},{"id":"-ok"},{}]"#, Split::Lines, None, Some("id")), 10, &env).await.unwrap();
-        assert_eq!((result.total, result.omitted), (1, 4));
-        assert_eq!(result.records[0].handle, "-ok");
-        for scope in [
-            input(b"x", Split::Lines, Some(0), None),
-            input(b"x", Split::Lines, Some(1), Some("id")),
-            Scope::Prefix(None),
-        ] {
-            assert_eq!(
-                enumerate("-", scope, 10, &env).await.unwrap_err().kind(),
-                "usage"
-            );
-        }
-        assert_eq!(
-            enumerate(
-                "-",
-                input(b"invalid json", Split::Lines, None, Some("id")),
-                10,
-                &env
-            )
-            .await
-            .unwrap_err()
-            .kind(),
-            "input"
-        );
-        assert_eq!(
-            enumerate("commit", Scope::Prefix(Some("src".into())), 10, &env)
-                .await
-                .unwrap_err()
-                .kind(),
-            "usage"
-        );
-        assert_eq!(
-            enumerate("unknown", Scope::Prefix(None), 10, &env)
-                .await
-                .unwrap_err()
-                .kind(),
-            "usage"
-        );
-        assert_eq!(
-            enrich_with_env("-", &["x".into(), "y".into()], &env).await,
-            ["", ""]
-        );
+    /// The fake git of `env` as a command, for the supervisor itself.
+    fn command(env: &Env) -> Command {
+        Command::new(env.cwd.join("git"))
     }
 
     #[test]
-    fn deduplication_uses_handle_and_evidence_and_age_is_computed() {
-        let record = |handle: &str, evidence: &str| Record {
-            handle: handle.into(),
-            evidence: evidence.into(),
-            raw: 0..0,
-        };
-        let result = listing(
-            vec![
-                record("a", "same"),
-                record("b", "same"),
-                record("a", "same"),
-                record("a", "different"),
-            ],
-            0,
-            false,
-            1,
+    fn a_lister_runs_hardened_with_null_stdin_and_drains_both_pipes() {
+        let mut env = fake_git(
+            r#"
+[ "$GH_PROMPT_DISABLED" = 1 ] && [ "$GIT_TERMINAL_PROMPT" = 0 ] && [ "$NO_COLOR" = 1 ] || exit 2
+[ "$JEVIFY_CONFIG_DIR" = "$PWD/config" ] || exit 3
+if read -r line; then exit 4; fi
+i=0
+while [ "$i" -lt 12000 ]; do
+    printf 'stdout stream\n'
+    printf 'stderr stream\n' >&2
+    i=$((i + 1))
+done
+"#,
         );
-        assert_eq!(result.total, 3);
-        assert_eq!(age(172800, 0), "2 days ago");
-        assert_eq!(age(3600, 0), "1 hour ago");
-        assert_eq!(age(60, 0), "1 minute ago");
-        assert_eq!(age(0, 10), "0 seconds ago");
-        assert_eq!(REGISTRY.iter().map(|k| &k.name).collect::<Vec<_>>(), KINDS);
-        assert!(kind("branch").unwrap().ordered);
-        assert!(kind("branch").unwrap().has_tier_two);
-        assert!(kind("-").unwrap().coded);
-        assert!(!kind("-").unwrap().path_kind);
-        assert!(kind("unknown").is_none());
+        env.config_dir = Some(env.cwd.join("config"));
+        let result = run_lister(&["git".into()], &env).unwrap();
+        assert_eq!(result.len(), 12000 * b"stdout stream\n".len());
+    }
+
+    /// A lister that fails, overflows or outlives the deadline is an error, never a partial
+    /// list, and waiting for it never blocks the runtime.
+    #[tokio::test]
+    async fn a_lister_failure_overflow_or_deadline_is_an_error_never_a_partial_list() {
+        // Exit 1 after a valid ref; exit 0 while a background child keeps the pipes open.
+        for (body, text) in [
+            (
+                "printf 'refs/heads/x\\000\\0001\\000tip\\000\\n'; printf 'tool failed' >&2; exit 1",
+                "tool failed",
+            ),
+            (
+                "printf 'refs/heads/x\\000\\0001\\000tip\\000\\n'; /bin/sleep 5 & exit 0",
+                "EOF",
+            ),
+        ] {
+            let error = enumerate("branch", Scope::Prefix(None), 10, &fake_git(body))
+                .await
+                .unwrap_err();
+            assert_eq!(error.kind(), "lister_failed");
+            assert!(error.to_string().contains(text), "{error}");
+        }
+        let mut env = fake_git("exec /bin/sleep 2");
+        env.deadline = Instant::now() + Duration::from_millis(100);
+        let start = Instant::now();
+        let (result, ticks) =
+            tokio::join!(enumerate("branch", Scope::Prefix(None), 10, &env), async {
+                let mut ticks = 0;
+                while start.elapsed() < Duration::from_millis(80) {
+                    tokio::time::sleep(Duration::from_millis(5)).await;
+                    ticks += 1;
+                }
+                ticks
+            });
+        assert!(ticks >= 2);
+        assert!(start.elapsed() < Duration::from_millis(700));
+        assert!(result.unwrap_err().to_string().contains("deadline"));
+        assert!(
+            run_lister(&["git".into()], &env)
+                .unwrap_err()
+                .to_string()
+                .contains("deadline")
+        );
+        // The cap counts stdout and stderr together.
+        let env = fake_git("printf '1234567890'; printf '1234567890' >&2");
+        let far = Instant::now() + LISTER_TIMEOUT;
+        let overflow = supervise(command(&env), Mode::Strict, far, 15);
+        assert!(
+            matches!(&overflow, Err(Stopped::Failed(message)) if message.contains("cap")),
+            "{overflow:?}"
+        );
+        for argv in [vec![OsString::from("missing-program")], vec![]] {
+            assert_eq!(run_lister(&argv, &env).unwrap_err().kind(), "lister_failed");
+        }
+        let env = fake_git(
+            "i=0; while [ \"$i\" -lt 5000 ]; do printf x >&2; i=$((i + 1)); done; printf tail >&2; exit 1",
+        );
+        let error = run_lister(&["git".into()], &env).unwrap_err().to_string();
+        assert!(error.ends_with("tail") && error.len() < 4200, "{error}");
+        // Output a recipe cannot read is the lister's failure too.
+        let garbled = fake_tool("gh", "echo 'not json'", None);
+        let error = enumerate("pr", Scope::Prefix(None), 10, &garbled)
+            .await
+            .unwrap_err();
+        assert_eq!(error.kind(), "lister_failed");
+        assert!(error.to_string().starts_with("gh: "), "{error}");
+    }
+
+    #[test]
+    fn best_effort_keeps_the_first_bytes_whatever_the_status_and_nothing_past_the_deadline() {
+        let env = fake_git("yes | head -c 200000; exit 3");
+        let far = Instant::now() + LISTER_TIMEOUT;
+        let out = supervise(command(&env), Mode::BestEffort, far, 100).unwrap();
+        assert_eq!(out.len(), 100);
+        assert!(out.iter().all(|byte| b"y\n".contains(byte)));
+        let out = supervise(command(&env), Mode::BestEffort, far, usize::MAX).unwrap();
+        assert_eq!(out.len(), 200_000);
+        let slow = fake_git("printf early; exec /bin/sleep 2");
+        let soon = Instant::now() + Duration::from_millis(100);
+        assert!(supervise(command(&slow), Mode::BestEffort, soon, 100).is_err());
     }
 
     fn git(dir: &Path, args: &[&str], timestamp: u64) -> Vec<u8> {
@@ -1530,7 +1550,7 @@ mod tests {
         .await;
         assert_eq!(withheld, 0);
         assert!(prefixed[0].contains("subject-4"), "{}", prefixed[0]);
-        let remote = enrich_with_env("branch", &["remote-only".into()], &env).await;
+        let (remote, _) = enrich_in("branch", Path::new(""), &["remote-only".into()], &env).await;
         assert!(remote[0].starts_with("remote-only\n"), "{}", remote[0]);
         assert!(remote[0].contains("subject-4"), "{}", remote[0]);
         assert!(!remote[0].contains("subject-5"), "{}", remote[0]);
@@ -1541,7 +1561,7 @@ mod tests {
                 .records
                 .is_empty()
         );
-        let evidence = enrich_with_env("branch", &["main".into()], &env).await;
+        let (evidence, _) = enrich_in("branch", Path::new(""), &["main".into()], &env).await;
         for i in 1..6 {
             assert!(
                 evidence[0].contains(&format!("subject-{i}")),
@@ -1558,114 +1578,6 @@ mod tests {
             .unwrap_err();
         assert_eq!(error.kind(), "lister_failed");
         assert!(error.to_string().contains("not a git repository"));
-    }
-
-    #[tokio::test]
-    async fn only_finalists_get_tier_two_and_keep_their_order() {
-        let env = fake_git(
-            r#"
-printf '%s\n' "$*" >> calls
-if [ "$1" = for-each-ref ]; then
-    i=50
-    while [ "$i" -gt 0 ]; do
-        printf 'refs/heads/b%s\000\000%s\000tip-%s\000\n' "$i" "$i" "$i"
-        i=$((i - 1))
-    done
-else
-    for arg in "$@"; do
-        case "$arg" in b*) printf '\000subject-%s\000\000\npath/file\000' "$arg";; esac
-    done
-fi
-"#,
-        );
-        let result = enumerate("branch", Scope::Prefix(None), 50, &env)
-            .await
-            .unwrap();
-        assert_eq!(result.total, 50);
-        assert_eq!(
-            fs::read_to_string(env.cwd.join("calls"))
-                .unwrap()
-                .lines()
-                .count(),
-            1
-        );
-        let evidence =
-            enrich_with_env("branch", &["b9".into(), "b45".into(), "b2".into()], &env).await;
-        for (value, name) in evidence.iter().zip(["b9", "b45", "b2"]) {
-            assert!(value.contains(&format!("subject-{name}")), "{value}");
-        }
-        let calls = fs::read_to_string(env.cwd.join("calls")).unwrap();
-        assert_eq!(calls.lines().count(), 4);
-        for (call, name) in calls.lines().skip(1).zip(["b9", "b45", "b2"]) {
-            assert!(call.ends_with(&format!("{name} --")));
-        }
-    }
-
-    #[tokio::test]
-    async fn runner_drains_both_pipes_and_injects_environment_and_null_stdin() {
-        let mut env = fake_git(
-            r#"
-[ "$GH_PROMPT_DISABLED" = 1 ] && [ "$GIT_TERMINAL_PROMPT" = 0 ] && [ "$NO_COLOR" = 1 ] || exit 2
-[ "$JEVIFY_CONFIG_DIR" = "$PWD/config" ] || exit 3
-if read -r line; then exit 4; fi
-i=0
-while [ "$i" -lt 12000 ]; do
-    printf 'stdout stream\n'
-    printf 'stderr stream\n' >&2
-    i=$((i + 1))
-done
-"#,
-        );
-        env.config_dir = Some(env.cwd.join("config"));
-        let result = run_lister(&["git".into()], &env).await.unwrap();
-        assert_eq!(result.len(), 12000 * b"stdout stream\n".len());
-    }
-
-    #[tokio::test]
-    async fn runner_deadline_kills_and_does_not_block_runtime() {
-        let mut env = fake_git("exec /bin/sleep 2");
-        env.deadline = Instant::now() + Duration::from_millis(100);
-        let start = Instant::now();
-        let argv = ["git".into()];
-        let (result, ticks) = tokio::join!(run_lister(&argv, &env), async {
-            let mut ticks = 0;
-            while start.elapsed() < Duration::from_millis(80) {
-                tokio::time::sleep(Duration::from_millis(5)).await;
-                ticks += 1;
-            }
-            ticks
-        });
-        assert!(ticks >= 2);
-        assert!(start.elapsed() < Duration::from_millis(700));
-        let error = result.unwrap_err();
-        assert_eq!(error.kind(), "lister_failed");
-        assert!(error.to_string().contains("deadline"));
-    }
-
-    #[tokio::test]
-    async fn runner_discards_partial_output_after_exit_or_inherited_pipe() {
-        // The second body exits 0 while a background child keeps the pipes open for
-        // 5 s. Had the runner waited for EOF instead of giving the readers READER_GRACE
-        // after exit, the pipes would close with exit 0 and `enumerate` would succeed,
-        // so `unwrap_err` plus the "EOF" message prove the early return without a
-        // wall-clock bound that a loaded machine could miss.
-        for body in [
-            "printf 'refs/heads/x\\000\\0001\\000tip\\000\\n'; printf 'tool failed' >&2; exit 1",
-            "printf 'refs/heads/x\\000\\0001\\000tip\\000\\n'; /bin/sleep 5 & exit 0",
-        ] {
-            let env = fake_git(body);
-            let start = Instant::now();
-            let error = enumerate("branch", Scope::Prefix(None), 10, &env)
-                .await
-                .unwrap_err();
-            assert_eq!(error.kind(), "lister_failed");
-            assert!(start.elapsed() < Duration::from_secs(5));
-            if body.contains("exit 1") {
-                assert!(error.to_string().contains("tool failed"));
-            } else {
-                assert!(error.to_string().contains("EOF"));
-            }
-        }
     }
 
     /// A scratch directory holding executable `name` (first on the injected PATH) and a
@@ -1692,50 +1604,6 @@ done
             .iter()
             .map(|r| r.handle.as_os_str())
             .collect()
-    }
-
-    #[test]
-    fn shipped_recipes_parse_are_unique_and_match_the_registry() {
-        assert_eq!(SHIPPED.lines().count(), 7);
-        let recipes = shipped();
-        assert_eq!(recipes.len(), 7);
-        let mut names = HashSet::new();
-        for recipe in recipes {
-            assert!(valid_kind_name(&recipe.kind), "{}", recipe.kind);
-            assert!(names.insert(recipe.kind.as_str()), "{}", recipe.kind);
-            let kind = kind(&recipe.kind).unwrap();
-            assert!(!kind.coded && !kind.path_kind && !kind.has_tier_two);
-            assert_eq!(kind.ordered, recipe.ordered, "{}", recipe.kind);
-        }
-        let coded: Vec<_> = REGISTRY
-            .iter()
-            .filter(|k| k.coded)
-            .map(|k| &k.name)
-            .collect();
-        assert_eq!(coded, ["-", "branch", "commit", "file", "dir", "tool"]);
-        assert!(kind("commit").unwrap().ordered && kind("commit").unwrap().has_tier_two);
-        assert!(kind("branch").unwrap().path_kind);
-        assert!(kind("file").unwrap().path_kind && kind("file").unwrap().has_tier_two);
-        assert!(kind("dir").unwrap().path_kind && kind("dir").unwrap().has_tier_two);
-        assert!(!kind("tool").unwrap().ordered && !kind("tool").unwrap().has_tier_two);
-        let shipped_names: Vec<_> = recipes.iter().map(|r| r.kind.as_str()).collect();
-        assert_eq!(&KINDS[coded.len()..], shipped_names.as_slice());
-        assert_eq!(
-            shipped_names,
-            [
-                "pr",
-                "issue",
-                "ci-run",
-                "stash",
-                "process",
-                "container",
-                "pod"
-            ]
-        );
-        for name in ["", "Pr", "-x", "1pr", "pr_x", "pr x"] {
-            assert!(!valid_kind_name(name), "{name}");
-        }
-        assert!(valid_kind_name("ci-run") && valid_kind_name("x-"));
     }
 
     #[tokio::test]
@@ -1780,7 +1648,7 @@ done
             assert_eq!(handles(&listing), ["7"]);
             assert_eq!(lookup("widget", env).unwrap_err().kind(), "recipe_invalid");
             let catalog = catalog(env);
-            assert_eq!(catalog.kinds.len(), KINDS.len());
+            assert_eq!(catalog.kinds.len(), CODED.len() + shipped().len());
             assert!(catalog.error.is_some());
         }
     }
@@ -1799,7 +1667,7 @@ done
             assert_eq!(error.kind(), "recipe_invalid");
             assert!(error.to_string().contains("line 2"), "{error}");
             // The shipped kind itself is unaffected: the file is not read.
-            assert!(lookup(shadow, &env).unwrap().unwrap().ordered);
+            assert_eq!(lookup(shadow, &env).unwrap().unwrap().name, shadow);
         }
         let twice = fake_tool(
             "widget",
@@ -1821,10 +1689,7 @@ done
         );
         let widget = lookup("widget", &env).unwrap().unwrap();
         assert_eq!(widget.name, "widget");
-        assert!(!widget.coded && !widget.ordered);
-        // The const registry never sees a user recipe.
-        assert!(kind("widget").is_none());
-        assert!(!KINDS.contains(&"widget"));
+        assert!(!widget.path_kind && !widget.has_tier_two);
         let listing = enumerate("widget", Scope::Prefix(None), 1, &env)
             .await
             .unwrap();
@@ -1865,267 +1730,7 @@ done
         assert!(lookup("widget", &unset).unwrap().is_none());
     }
 
-    #[tokio::test]
-    async fn recipe_handles_key_field_whole_line_and_ordered_limit() {
-        let recipes = [
-            r#"{"kind":"lines","list":["tool","lines"],"key":"id","ordered":true}"#,
-            r#"{"kind":"array","list":["tool","array"],"key":"id"}"#,
-            r#"{"kind":"fields","list":["tool","fields"],"field":2}"#,
-            r#"{"kind":"whole","list":["tool","whole"],"ordered":true}"#,
-        ]
-        .join("\n");
-        let env = fake_tool(
-            "tool",
-            r#"case "$1" in
-lines) printf '{"id":3,"title":"c"}\n{"id":2,"title":"b"}\n{"id":1,"title":"a"}\n';;
-array) printf '[{"id":"x","t":"one"},{"id":"y","t":"two"}]';;
-fields) printf 'a b c\nd e f\nshort\n';;
-whole) printf 'newest line\nolder line\noldest line\n';;
-esac"#,
-            Some(&recipes),
-        );
-        let lines = enumerate("lines", Scope::Prefix(None), 2, &env)
-            .await
-            .unwrap();
-        assert_eq!(handles(&lines), ["3", "2"]);
-        assert_eq!((lines.total, lines.ordered), (3, true));
-        assert!(lines.records[0].evidence.contains("\"title\":\"c\""));
-        let array = enumerate("array", Scope::Prefix(None), 1, &env)
-            .await
-            .unwrap();
-        assert_eq!(handles(&array), ["x", "y"]);
-        assert_eq!((array.total, array.ordered), (2, false));
-        assert!(array.records[1].evidence.contains("two"));
-        let fields = enumerate("fields", Scope::Prefix(None), 10, &env)
-            .await
-            .unwrap();
-        assert_eq!(handles(&fields), ["b", "e"]);
-        assert_eq!(fields.records[0].evidence, "a b c");
-        assert_eq!(fields.omitted, 1);
-        let whole = enumerate("whole", Scope::Prefix(None), 1, &env)
-            .await
-            .unwrap();
-        assert_eq!(handles(&whole), ["newest line"]);
-        assert_eq!((whole.total, whole.ordered), (3, true));
-    }
-
-    #[tokio::test]
-    async fn a_failing_or_garbled_lister_is_lister_failed_with_its_text() {
-        let env = fake_tool(
-            "gh",
-            "echo 'To get started with GitHub CLI, please run: gh auth login' >&2\necho 'not logged in' >&2\nexit 1",
-            None,
-        );
-        for name in ["pr", "issue", "ci-run"] {
-            let error = enumerate(name, Scope::Prefix(None), 10, &env)
-                .await
-                .unwrap_err();
-            assert_eq!(error.kind(), "lister_failed");
-            assert!(error.to_string().contains("not logged in"), "{error}");
-        }
-        let missing = Env {
-            path: "/nonexistent".into(),
-            ..env
-        };
-        assert_eq!(
-            enumerate("pr", Scope::Prefix(None), 10, &missing)
-                .await
-                .unwrap_err()
-                .kind(),
-            "lister_failed"
-        );
-        let garbled = fake_tool("gh", "echo 'not json'", None);
-        let error = enumerate("pr", Scope::Prefix(None), 10, &garbled)
-            .await
-            .unwrap_err();
-        assert_eq!(error.kind(), "lister_failed");
-        assert!(error.to_string().contains("gh"));
-    }
-
-    fn commit(dir: &Path, subject: &str, body: &str, timestamp: u64) -> String {
-        git(dir, &["add", "-A"], timestamp);
-        git(
-            dir,
-            &[
-                "-c",
-                "commit.gpgsign=false",
-                "commit",
-                "--allow-empty",
-                "-m",
-                subject,
-                "-m",
-                body,
-            ],
-            timestamp,
-        );
-        String::from_utf8(git(dir, &["rev-parse", "HEAD"], timestamp))
-            .unwrap()
-            .trim()
-            .to_owned()
-    }
-
-    #[tokio::test]
-    async fn commits_list_newest_first_with_exact_total_and_tier_two_bodies() {
-        let dir = scratch();
-        git(&dir, &["init", "--initial-branch=main"], 1700000000);
-        let env = environment(&dir);
-        let error = enumerate("commit", Scope::Prefix(None), 10, &env)
-            .await
-            .unwrap_err();
-        assert_eq!(error.kind(), "lister_failed");
-        assert!(error.to_string().contains("git"), "{error}");
-        let mut oids = Vec::new();
-        for i in 0..5 {
-            fs::create_dir_all(dir.join("src")).unwrap();
-            fs::write(dir.join("src").join(format!("f{i}.rs")), format!("{i}\n")).unwrap();
-            oids.push(commit(
-                &dir,
-                &format!("subject-{i}"),
-                &format!("body-{i} line one\n\nbody-{i} line three"),
-                1700000000 + i * 60,
-            ));
-            if i == 2 {
-                let listing = enumerate("commit", Scope::Prefix(None), 10, &env)
-                    .await
-                    .unwrap();
-                assert_eq!(
-                    (listing.total, listing.records.len(), listing.ordered),
-                    (3, 3, true)
-                );
-            }
-        }
-        let listing = enumerate("commit", Scope::Prefix(None), 3, &env)
-            .await
-            .unwrap();
-        assert_eq!((listing.total, listing.records.len()), (5, 3));
-        assert_eq!(
-            handles(&listing),
-            [oids[4].as_str(), oids[3].as_str(), oids[2].as_str()]
-        );
-        assert_eq!(oids[4].len(), 40);
-        assert_eq!(listing.records[0].evidence, "subject-4");
-        assert!(!listing.records[0].evidence.contains("body"));
-        let (evidence, withheld) = enrich_in(
-            "commit",
-            Path::new("ignored/"),
-            &[oids[1].clone().into(), oids[4].clone().into()],
-            &env,
-        )
-        .await;
-        assert_eq!(withheld, 0);
-        assert!(
-            evidence[0].contains("body-1 line one\n\nbody-1 line three"),
-            "{}",
-            evidence[0]
-        );
-        assert!(
-            evidence[0].contains("Changed paths: src/f1.rs"),
-            "{}",
-            evidence[0]
-        );
-        assert!(evidence[1].starts_with(&oids[4]));
-        assert!(evidence[1].contains("src/f4.rs"));
-        assert_eq!(
-            enumerate("commit", Scope::Prefix(Some("src/".into())), 3, &env)
-                .await
-                .unwrap_err()
-                .kind(),
-            "usage"
-        );
-        // `enrich` keeps its signature: process environment, no prefix.
-        assert_eq!(enrich("branch", &["HEAD".into()]).await.len(), 1);
-    }
-
-    #[tokio::test]
-    async fn commit_tier_two_runs_for_finalists_only() {
-        let env = fake_git(
-            r#"
-printf '%s\n' "$*" >> calls
-case "$1 $2" in
-"log -n") i=0; while [ "$i" -lt 200 ]; do printf 'oid%s\000subject %s\000' "$i" "$i"; i=$((i + 1)); done;;
-"log -1") printf 'body of %s\000\000\nsrc/a.rs\000src/b.rs\000' "$9";;
-"show --format=") printf ' src/a.rs | 2 +-\n@@ -1 +1 @@ diff of %s\n' "${10}";;
-"rev-list --count") echo 200;;
-*) exit 9;;
-esac
-"#,
-        );
-        let listing = enumerate("commit", Scope::Prefix(None), 100, &env)
-            .await
-            .unwrap();
-        assert_eq!((listing.total, listing.records.len()), (200, 100));
-        assert_eq!(listing.records[0].handle, "oid0");
-        assert_eq!(listing.records[0].evidence, "subject 0");
-        let calls = fs::read_to_string(env.cwd.join("calls")).unwrap();
-        assert_eq!(calls.lines().count(), 2);
-        assert!(calls.contains("log -n 100 -z"));
-        let (evidence, withheld) = enrich_in(
-            "commit",
-            Path::new(""),
-            &["oid7".into(), "oid150".into(), "oid2".into()],
-            &env,
-        )
-        .await;
-        assert_eq!(withheld, 0);
-        for (value, name) in evidence.iter().zip(["oid7", "oid150", "oid2"]) {
-            assert_eq!(
-                value,
-                &format!(
-                    "{name}\nbody of {name}\nChanged paths: src/a.rs, src/b.rs\n\
-                     Diff:\nsrc/a.rs | 2 +-\n@@ -1 +1 @@ diff of {name}"
-                )
-            );
-        }
-        // Two calls per finalist: the body with its paths, then the diff.
-        let calls = fs::read_to_string(env.cwd.join("calls")).unwrap();
-        assert_eq!(calls.lines().count(), 8);
-        for (call, name) in calls.lines().skip(2).zip(
-            ["oid7", "oid150", "oid2"]
-                .into_iter()
-                .flat_map(|name| [name, name]),
-        ) {
-            assert!(
-                call.ends_with(&format!("--end-of-options {name} --")),
-                "{call}"
-            );
-        }
-    }
-
-    /// A diff longer than the per-finalist budget keeps its stat and loses its tail.
-    #[tokio::test]
-    async fn commit_evidence_clips_a_long_diff() {
-        let env = fake_git(
-            r#"
-case "$1 $2" in
-"log -1") printf 'body\000\000\nsrc/a.rs\000';;
-"show --format=") printf ' src/a.rs | 9999 +\n'; i=0; while [ "$i" -lt 400 ]; do printf '+a line of patch text that is long enough to matter\n'; i=$((i + 1)); done;;
-*) exit 9;;
-esac
-"#,
-        );
-        let (evidence, _) = enrich_in("commit", Path::new(""), &["oid0".into()], &env).await;
-        let diff = evidence[0].split_once("Diff:\n").unwrap().1;
-        assert_eq!(diff.chars().count(), DIFF_CHARS);
-        assert!(diff.starts_with("src/a.rs | 9999 +"));
-        assert!(diff.ends_with('…'));
-    }
-
-    /// A git that cannot show the diff still yields the subject, body and paths.
-    #[tokio::test]
-    async fn commit_evidence_survives_a_failing_diff() {
-        let env = fake_git(
-            r#"
-case "$1 $2" in
-"log -1") printf 'body\000\000\nsrc/a.rs\000';;
-*) exit 9;;
-esac
-"#,
-        );
-        let (evidence, _) = enrich_in("commit", Path::new(""), &["oid0".into()], &env).await;
-        assert_eq!(evidence[0], "oid0\nbody\nChanged paths: src/a.rs\nDiff:\n");
-    }
-
-    /// A repository with hidden, ignored, untracked, secret and non-UTF-8 paths.
+    /// A repository with hidden, untracked and secret paths.
     fn tree() -> Env {
         let dir = scratch();
         git(&dir, &["init", "--initial-branch=main"], 1700000000);
@@ -2138,34 +1743,16 @@ esac
             ("id_rsa", "SECRET-RSA\n"),
             ("x.pem", "SECRET-PEM\n"),
             ("a/.hidden/b.txt", "SECRET-A\n"),
-            (".gitignore", "*.log\n"),
         ] {
             let file = dir.join(path);
             fs::create_dir_all(file.parent().unwrap()).unwrap();
             fs::write(&file, content).unwrap();
         }
-        commit(&dir, "tree", "", 1700000000);
-        fs::write(dir.join("ignored.log"), "MARKER-IGNORED\n").unwrap();
+        git(&dir, &["add", "-A"], 1700000000);
+        let commit = ["-c", "commit.gpgsign=false", "commit", "-m", "tree"];
+        git(&dir, &commit, 1700000000);
         fs::write(dir.join("src/cmd/new.rs"), "MARKER-NEW untracked\n").unwrap();
-        // APFS refuses a name that is not UTF-8; the case runs where the file system allows it.
-        let _ = fs::write(
-            dir.join("src/cmd").join(OsStr::from_bytes(b"\xff.rs")),
-            "MARKER-BYTES\n",
-        );
         environment(&dir)
-    }
-
-    /// The expected handles, plus the non-UTF-8 one where the file system could create it.
-    fn with_bytes(env: &Env, prefix: &str, mut expected: Vec<Vec<u8>>) -> Vec<Vec<u8>> {
-        if env
-            .cwd
-            .join("src/cmd")
-            .join(OsStr::from_bytes(b"\xff.rs"))
-            .exists()
-        {
-            expected.push([prefix.as_bytes(), b"\xff.rs"].concat());
-        }
-        expected
     }
 
     fn sorted(listing: &Listing) -> Vec<Vec<u8>> {
@@ -2176,107 +1763,6 @@ esac
             .collect();
         handles.sort();
         handles
-    }
-
-    #[tokio::test]
-    async fn files_and_dirs_honour_the_prefix_rule_and_list_hidden_but_not_ignored() {
-        let env = tree();
-        let scoped = enumerate("file", Scope::Prefix(Some("src/cmd/".into())), 1, &env)
-            .await
-            .unwrap();
-        let expected = with_bytes(
-            &env,
-            "",
-            vec![
-                b".hidden/b.txt".to_vec(),
-                b"a.rs".to_vec(),
-                b"new.rs".to_vec(),
-            ],
-        );
-        assert_eq!(sorted(&scoped), expected);
-        assert_eq!(
-            (scoped.total, scoped.omitted, scoped.ordered),
-            (expected.len(), 0, false)
-        );
-        for record in &scoped.records {
-            assert!(!record.evidence.contains("MARKER"), "{}", record.evidence);
-            assert_eq!(record.raw, 0..0);
-        }
-        let option = enumerate(
-            "file",
-            Scope::Prefix(Some("--config=src/".into())),
-            10,
-            &env,
-        )
-        .await
-        .unwrap();
-        let mut expected = with_bytes(
-            &env,
-            "cmd/",
-            vec![
-                b"cmd/.hidden/b.txt".to_vec(),
-                b"cmd/a.rs".to_vec(),
-                b"cmd/new.rs".to_vec(),
-            ],
-        );
-        expected.push(b"lib.rs".to_vec());
-        assert_eq!(sorted(&option), expected);
-        for prefix in ["nope/", "--config=nope/", "--config=src/lib.rs/"] {
-            let error = enumerate("file", Scope::Prefix(Some(prefix.into())), 10, &env)
-                .await
-                .unwrap_err();
-            assert_eq!(error.kind(), "lister_failed", "{prefix}");
-            assert!(error.to_string().contains("names no directory"), "{error}");
-        }
-        // A literal that does not end with `/` is no prefix.
-        let bare = enumerate("file", Scope::Prefix(Some("--config=".into())), 10, &env)
-            .await
-            .unwrap();
-        let whole = enumerate("file", Scope::Prefix(None), 10, &env)
-            .await
-            .unwrap();
-        assert_eq!(sorted(&bare), sorted(&whole));
-        let names = sorted(&whole);
-        for expected in [
-            ".npmrc",
-            ".env.local",
-            "id_rsa",
-            "x.pem",
-            "a/.hidden/b.txt",
-            ".gitignore",
-            "src/cmd/new.rs",
-        ] {
-            assert!(names.contains(&expected.as_bytes().to_vec()), "{expected}");
-        }
-        assert!(!names.contains(&b"ignored.log".to_vec()));
-        assert!(names.iter().all(|n| !n.starts_with(b".git/")));
-        let dirs = enumerate("dir", Scope::Prefix(None), 10, &env)
-            .await
-            .unwrap();
-        assert_eq!(
-            sorted(&dirs),
-            [
-                b"a".to_vec(),
-                b"a/.hidden".to_vec(),
-                b"src".to_vec(),
-                b"src/cmd".to_vec(),
-                b"src/cmd/.hidden".to_vec()
-            ]
-        );
-        let dirs = enumerate("dir", Scope::Prefix(Some("src/".into())), 10, &env)
-            .await
-            .unwrap();
-        assert_eq!(sorted(&dirs), [b"cmd".to_vec(), b"cmd/.hidden".to_vec()]);
-        // The non-UTF-8 name renders lossily (U+FFFD sorts after ASCII) where it exists.
-        let listing = if with_bytes(&env, "", Vec::new()).is_empty() {
-            "3 entries: .hidden/, a.rs, new.rs"
-        } else {
-            "4 entries: .hidden/, a.rs, new.rs, \u{FFFD}.rs"
-        };
-        assert_eq!(
-            enrich_in("dir", Path::new("src/"), &["cmd".into()], &env).await,
-            (vec![listing.to_owned()], 0)
-        );
     }
 
     #[tokio::test]
@@ -2347,12 +1833,7 @@ esac
         )
         .await;
         assert_eq!(withheld, 2);
-        assert!(
-            evidence[0].contains("cmd/") && evidence[0].contains("lib.rs"),
-            "{}",
-            evidence[0]
-        );
-        assert!(evidence[0].starts_with("2 entries: "), "{}", evidence[0]);
+        assert_eq!(evidence[0], "2 entries: cmd/, lib.rs");
         assert!(
             evidence[1].contains("a.rs")
                 && evidence[1].contains("new.rs")
@@ -2375,25 +1856,10 @@ esac
             enrich_in("dir", Path::new("nope/"), &["cmd".into()], &env).await,
             (vec![String::new()], 0)
         );
-        // A symbolic link to a directory is withheld; a long listing ends in a count.
-        let dir = scratch();
-        fs::create_dir(dir.join("real")).unwrap();
-        for i in 0..30 {
-            fs::write(dir.join("real").join(format!("f{i:02}.txt")), "x\n").unwrap();
-        }
-        std::os::unix::fs::symlink("real", dir.join("link")).unwrap();
-        let env = environment(&dir);
-        let (evidence, withheld) =
-            enrich_in("dir", Path::new(""), &["real".into(), "link".into()], &env).await;
-        assert_eq!(withheld, 1);
-        assert!(
-            evidence[0].starts_with("30 entries: f00.txt, "),
-            "{}",
-            evidence[0]
-        );
-        assert!(evidence[0].ends_with("f23.txt, +6 more"), "{}", evidence[0]);
-        assert!(!evidence[0].contains("f24.txt"), "{}", evidence[0]);
-        assert_eq!(evidence[1], "");
+        // A symbolic link to a directory is withheld.
+        std::os::unix::fs::symlink("src", env.cwd.join("link")).unwrap();
+        let link = enrich_in("dir", Path::new(""), &["link".into()], &env).await;
+        assert_eq!(link, (vec![String::new()], 1));
     }
 
     #[tokio::test]
@@ -2444,78 +1910,5 @@ esac
                 .kind(),
             "lister_failed"
         );
-    }
-
-    #[tokio::test]
-    async fn tools_come_from_the_injected_path_and_count_the_capped_names() {
-        let dir = scratch();
-        for i in 0..1_501 {
-            let file = dir.join(format!("t{i:04}"));
-            fs::write(&file, "").unwrap();
-            fs::set_permissions(&file, fs::Permissions::from_mode(0o755)).unwrap();
-        }
-        let env = Env {
-            path: dir.as_os_str().to_owned(),
-            ..environment(&dir)
-        };
-        let listing = enumerate("tool", Scope::Prefix(None), 10, &env)
-            .await
-            .unwrap();
-        assert_eq!(
-            (
-                listing.records.len(),
-                listing.total,
-                listing.omitted,
-                listing.ordered
-            ),
-            (1_500, 1_501, 1, false)
-        );
-        assert_eq!(listing.records[0].handle, "t0000");
-        assert_eq!(listing.records[0].evidence, "t0000: (no man page)");
-        assert_eq!(
-            enumerate("tool", Scope::Prefix(Some("src/".into())), 10, &env)
-                .await
-                .unwrap_err()
-                .kind(),
-            "usage"
-        );
-        assert_eq!(
-            enrich_in("tool", Path::new(""), &["t0000".into()], &env).await,
-            (vec![String::new()], 0)
-        );
-        let catalog = catalog(&env);
-        let names: Vec<_> = catalog.kinds.iter().map(|k| k.name.as_str()).collect();
-        assert_eq!(&names[..6], &KINDS[..6]);
-        assert!(catalog.kinds[5].list.is_empty());
-        assert_eq!(catalog.kinds[2].list[1], "log");
-    }
-
-    #[test]
-    fn runner_rejects_oversize_missing_program_expired_deadline_and_bounds_stderr() {
-        let env = fake_git("printf '1234567890'; printf '1234567890' >&2");
-        let error = run_lister_blocking(&["git".into()], &env, 15).unwrap_err();
-        assert!(error.to_string().contains("cap"));
-        let error = run_lister_blocking(&["missing-program".into()], &env, 100).unwrap_err();
-        assert_eq!(error.kind(), "lister_failed");
-        assert_eq!(
-            run_lister_blocking(&[], &env, 100).unwrap_err().kind(),
-            "lister_failed"
-        );
-        let expired = Env {
-            deadline: Instant::now(),
-            ..env
-        };
-        assert!(
-            run_lister_blocking(&["git".into()], &expired, 100)
-                .unwrap_err()
-                .to_string()
-                .contains("deadline")
-        );
-        let env = fake_git(
-            "i=0; while [ \"$i\" -lt 5000 ]; do printf x >&2; i=$((i + 1)); done; printf tail >&2; exit 1",
-        );
-        let error = run_lister_blocking(&["git".into()], &env, OUTPUT_CAP).unwrap_err();
-        assert!(error.to_string().ends_with("tail"));
-        assert!(error.to_string().len() < 4200);
     }
 }

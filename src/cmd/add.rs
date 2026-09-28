@@ -4,8 +4,11 @@ use crate::exit::{Exit, JevifyError};
 use crate::gitdiff;
 use crate::jev::client::Client;
 use crate::jev::{Question, Questions};
+use crate::source::{self, Mode, Stopped};
 use std::io::Write;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::time::Instant;
 
 const BATCH: usize = 20;
 /// Reject oversized hunks rather than staging evidence the model did not see.
@@ -18,37 +21,33 @@ pub async fn run(
     dry_run: bool,
     machine: bool,
 ) -> Result<Outcome, JevifyError> {
+    // The two reads change nothing, so they run under the lister deadline; staging does not.
+    let git = |dir: &Path, args: &[&str]| {
+        let mut command = Command::new("git");
+        command.current_dir(dir).args(args);
+        let deadline = Instant::now() + source::LISTER_TIMEOUT;
+        source::supervise(command, Mode::Strict, deadline, usize::MAX).map_err(|e| match e {
+            Stopped::Spawn(e) => JevifyError::Input(format!("git: {e}")),
+            Stopped::Failed(_) => JevifyError::Input("not a git repository (or git failed)".into()),
+        })
+    };
     // From a subdirectory `git diff` lists the whole repo, but `git apply` silently skips paths
     // outside the cwd (exit 0): run both at the top level, or hunks are reported staged but are not.
-    let top = Command::new("git")
-        .args(["rev-parse", "--show-toplevel"])
-        .output()
-        .map_err(|e| JevifyError::Input(format!("git: {e}")))?;
-    if !top.status.success() {
-        return Err(JevifyError::Input(
-            "not a git repository (or git failed)".into(),
-        ));
-    }
-    let top = std::path::PathBuf::from(String::from_utf8_lossy(&top.stdout).trim());
+    let top = git(Path::new("."), &["rev-parse", "--show-toplevel"])?;
+    let top = PathBuf::from(String::from_utf8_lossy(&top).trim());
     // Explicit prefixes: a user's `diff.noprefix=true` would otherwise break file_name and git apply.
-    let out = Command::new("git")
-        .current_dir(&top)
-        .args([
+    let out = git(
+        &top,
+        &[
             "diff",
             "--no-color",
             "--no-ext-diff",
             "--src-prefix=a/",
             "--dst-prefix=b/",
             "-U3",
-        ])
-        .output()
-        .map_err(|e| JevifyError::Input(format!("git: {e}")))?;
-    if !out.status.success() {
-        return Err(JevifyError::Input(
-            "not a git repository (or git failed)".into(),
-        ));
-    }
-    let files = gitdiff::parse(&String::from_utf8_lossy(&out.stdout));
+        ],
+    )?;
+    let files = gitdiff::parse(&String::from_utf8_lossy(&out));
     let flat: Vec<(usize, usize, String)> = files
         .iter()
         .enumerate()
