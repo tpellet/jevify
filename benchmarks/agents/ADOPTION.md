@@ -364,8 +364,13 @@ USD; `E1-required-r1` reached the right one after 12 turns and 0.054 USD.
 3. Where jevify named the gold in the `required` arm, the agent used it, 15 of 15
    such runs, and never overrode it.
 4. A tool call that goes wrong is usually an argument-shape error, not a wrong
-   judgment: 7 of the 49 calls exited 6 or 2 with nothing printed, against 13
-   abstentions and 3 confident wrong answers.
+   judgment. Corrected 2026-09-28 after a recount of the call logs of the eight
+   scored tasks: of 56 calls, 15 produced no judgment at all, 27 per cent — 7 exited
+   6, one exited 2, and 7 were killed at 128. The figure first published here, 7 of
+   49 exiting 6 or 2, counted only the two usage exits and took its denominator from
+   the arms rather than from the logs; it understated the rate by more than half. The
+   remaining 41 calls judged: 26 answered, 15 abstained, and 3 of the answers were
+   wrong. A reader should take the 27 per cent, not the original 14.
 
 **Not supported.**
 
