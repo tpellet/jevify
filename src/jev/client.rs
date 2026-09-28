@@ -20,7 +20,6 @@ pub struct Stats {
 #[derive(Clone, Copy)]
 pub(crate) enum AttemptKind {
     Inference,
-    Health,
     Prewarm,
     Semantic,
 }
@@ -29,7 +28,6 @@ impl AttemptKind {
     fn counts(self, t: &mut crate::output::Telemetry) -> &mut crate::output::AttemptCounts {
         match self {
             Self::Inference => &mut t.inference_posts,
-            Self::Health => &mut t.health_gets,
             Self::Prewarm => &mut t.prewarm_gets,
             Self::Semantic => &mut t.semantic_calls,
         }

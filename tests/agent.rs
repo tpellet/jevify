@@ -107,7 +107,7 @@ async fn health_never_follows_redirects() {
 
     let target = MockServer::start().await;
     let server = MockServer::start().await;
-    Mock::given(method("GET"))
+    Mock::given(method("POST"))
         .respond_with(ResponseTemplate::new(302).insert_header("location", target.uri()))
         .expect(1)
         .mount(&server)
@@ -130,32 +130,124 @@ async fn health_never_follows_redirects() {
     assert!(target.received_requests().await.unwrap().is_empty());
 }
 
-/// Only the backend that needs a key can fail for want of one (`tests/classifier.rs` covers
-/// the keyless backend); a reachable backend is exit 0 without an inference request.
+/// Health requires a fresh classification on either backend, even with caching enabled.
 #[tokio::test(flavor = "multi_thread")]
-async fn health_is_5_without_a_key_and_0_against_a_reachable_backend() {
+async fn health_is_5_without_a_key_and_0_after_uncached_classification() {
     common::bin()
         .env("JEVIFY_BACKEND", "typesafe")
         .args(["health", "--json"])
         .assert()
         .code(5);
-    let server = common::mock(common::FakeJev {
+    let fake = common::FakeJev {
         choose: |_, _, _| "NONE".into(),
         noul: |_, _| 0.8,
-    })
-    .await;
-    let out = tokio::task::spawn_blocking(move || {
-        common::jevify(&server)
-            .args(["health", "--json"])
-            .output()
-            .unwrap()
-    })
-    .await
-    .unwrap();
-    assert_eq!(out.status.code(), Some(0));
-    let value: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
-    assert_eq!(value["exit_code"], 0);
-    assert_eq!(value["meta"]["requests"], 0);
+    };
+    for classifier in [false, true] {
+        let server = if classifier {
+            common::mock_classifier(fake.clone()).await
+        } else {
+            common::mock(fake.clone()).await
+        };
+        let cache = tempfile::tempdir().unwrap().keep();
+        for _ in 0..2 {
+            let mut command = if classifier {
+                common::jevify_classifier(&server)
+            } else {
+                common::jevify(&server)
+            };
+            command
+                .env_remove("JEVIFY_NO_CACHE")
+                .env("JEVIFY_CACHE_DIR", &cache);
+            let out = tokio::task::spawn_blocking(move || {
+                command.args(["health", "--json"]).output().unwrap()
+            })
+            .await
+            .unwrap();
+            assert_eq!(out.status.code(), Some(0), "{out:?}");
+            let value: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+            assert_eq!(value["exit_code"], 0);
+            assert_eq!(
+                value["data"]["backend"],
+                if classifier { "classifier" } else { "typesafe" }
+            );
+            assert_eq!(value["data"]["api"], "answered");
+            assert_eq!(value["data"]["model"], "jev-fake");
+            assert!(value["data"]["latency_ms"].is_u64());
+            assert_eq!(value["meta"]["requests"], 1);
+            assert_eq!(value["meta"]["cache_hits"], 0);
+        }
+        let requests = server.received_requests().await.unwrap();
+        assert_eq!(
+            requests.len(),
+            2,
+            "one real classification per health invocation"
+        );
+        assert!(requests.iter().all(|r| r.method == "POST"));
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn health_reports_billing_quota_and_auth_errors() {
+    use serde_json::json;
+    use wiremock::matchers::method;
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+    for (backend, status, body, exit, kind) in [
+        (
+            "typesafe",
+            402,
+            json!({"detail":{"error_type":"billing_error","message":"no available TypeSafe API credits"}}),
+            4,
+            "quota_exhausted",
+        ),
+        (
+            "classifier",
+            402,
+            json!({"code":"request_spending_limit","error":"The daily per-IP budget is spent"}),
+            4,
+            "quota_exhausted",
+        ),
+        (
+            "classifier",
+            429,
+            json!({"code":"free_ip_daily_budget","error":"budget spent"}),
+            4,
+            "quota_exhausted",
+        ),
+        (
+            "typesafe",
+            401,
+            json!({"error":"invalid key"}),
+            5,
+            "bad_api_key",
+        ),
+        (
+            "typesafe",
+            403,
+            json!({"error":"invalid key"}),
+            5,
+            "bad_api_key",
+        ),
+    ] {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(status).set_body_json(body))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let mut command = common::jevify(&server);
+        command.env("JEVIFY_BACKEND", backend);
+        let out = tokio::task::spawn_blocking(move || {
+            command.args(["health", "--json"]).output().unwrap()
+        })
+        .await
+        .unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        assert_eq!(out.status.code(), Some(exit), "{value}");
+        assert_eq!(value["exit_code"], exit);
+        assert_eq!(value["ok"], false);
+        assert_eq!(value["error"]["kind"], kind);
+        assert!(!value["error"]["hint"].as_str().unwrap().is_empty());
+    }
 }
 
 #[test]
@@ -166,6 +258,30 @@ fn init_agents_prints_one_screen_of_instructions_in_human_and_json() {
     assert!(text.contains("jevify capabilities --json"));
     assert!(text.contains("JEVIFY_STATUS_FILE"));
     assert!(text.lines().count() <= 25);
+    assert!(text.split_whitespace().count() <= 250);
+    for command in [
+        "cargo test 2>&1 | jevify why",
+        "jevify fill --dry-run -- git show '@{commit:what it did}'",
+        "jevify pick --from commit",
+        "jevify filter",
+        "jevify label",
+        "jevify is 'reports a failure' < build.log",
+    ] {
+        assert!(text.contains(command), "{command}");
+    }
+    for contract in [
+        "branch",
+        "file",
+        "pr",
+        "ci-run",
+        "Single-quote",
+        "error.example",
+        "data.shortlist",
+        "quota_exhausted",
+        "stop for today",
+    ] {
+        assert!(text.contains(contract), "{contract}");
+    }
     let out = common::bin()
         .args(["init", "agents", "--robot"])
         .output()

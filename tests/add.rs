@@ -120,16 +120,16 @@ async fn stages_only_matching_hunks() {
     assert!(staged.contains("AUTH") && !staged.contains("typo"));
 }
 
-/// Decline (the machine form without `--yes`, exit 130, before any request, with the caller's
-/// command corrected), dry-run and abstention (exit 3) stage nothing.
+/// Missing confirmation (exit 2 before any request), dry-run and abstention stage nothing.
 #[tokio::test(flavor = "multi_thread")]
-async fn decline_dry_run_and_abstention_stage_nothing() {
+async fn usage_dry_run_and_abstention_stage_nothing() {
     let server = common::mock(yes_to_auth()).await;
     let d = repo();
     std::fs::write(d.path().join("f.txt"), "a\n").unwrap();
     commit_all(d.path());
     for (change, args, code) in [
-        ("b AUTH\n", vec!["--json", "add", "anything"], 130),
+        ("a\n", vec!["--json", "add", "anything"], 2),
+        ("b AUTH\n", vec!["--json", "add", "anything"], 2),
         ("b AUTH\n", vec!["add", "--dry-run", "anything"], 0),
         ("b typo\n", vec!["--json", "add", "--yes", "anything"], 3),
     ] {
@@ -146,13 +146,67 @@ async fn decline_dry_run_and_abstention_stage_nothing() {
             String::from_utf8_lossy(&out.stderr)
         );
         assert_eq!(staged(d.path(), &[]), "", "{args:?}");
-        if code == 130 {
+        if code == 2 {
             assert!(server.received_requests().await.unwrap().is_empty());
             let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
-            assert_eq!(v["error"]["kind"], "declined");
-            assert_eq!(v["error"]["example"], "jevify --json add --yes anything");
+            assert_eq!(v["error"]["kind"], "usage");
+            let example = v["error"]["example"].as_str().unwrap();
+            assert!(example.contains("--yes") || example.contains("--dry-run"));
         }
     }
+}
+
+/// A real terminal refusal remains exit 130; an index lock makes git reject staging atomically.
+#[tokio::test(flavor = "multi_thread")]
+async fn terminal_decline_and_apply_rejection_stage_nothing() {
+    let server = common::mock(yes_to_auth()).await;
+    let d = repo();
+    std::fs::write(d.path().join("f.txt"), "a\n").unwrap();
+    commit_all(d.path());
+    std::fs::write(d.path().join("f.txt"), "b AUTH\n").unwrap();
+    let mut terminal = assert_cmd::Command::new("script");
+    terminal
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .env("TYPESAFE_API_KEY", "test-key")
+        .env("JEVIFY_BASE_URL", server.uri())
+        .env("JEVIFY_NO_CACHE", "1")
+        .env("JEVIFY_CONFIG_DIR", d.path())
+        .current_dir(d.path())
+        .timeout(std::time::Duration::from_secs(15));
+    let binary = assert_cmd::cargo::cargo_bin("jevify");
+    #[cfg(target_os = "macos")]
+    terminal
+        .args(["-q", "/dev/null"])
+        .arg(&binary)
+        .args(["add", "anything"]);
+    #[cfg(target_os = "linux")]
+    terminal
+        .args(["-q", "-e", "-c"])
+        .arg(format!(
+            "{} add anything",
+            jevify::argv::quote(binary.to_str().unwrap())
+        ))
+        .arg("/dev/null");
+    let out = tokio::task::spawn_blocking(move || terminal.write_stdin("n\n").output().unwrap())
+        .await
+        .unwrap();
+    assert_eq!(out.status.code(), Some(130), "{out:?}");
+    assert!(String::from_utf8_lossy(&out.stdout).contains("Stage 1 hunk(s)?"));
+    assert_eq!(staged(d.path(), &[]), "");
+
+    std::fs::write(d.path().join(".git/index.lock"), "locked by test\n").unwrap();
+    let mut command = common::jevify(&server);
+    command
+        .current_dir(d.path())
+        .args(["add", "--yes", "--json", "anything"]);
+    let out = tokio::task::spawn_blocking(move || command.output().unwrap())
+        .await
+        .unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(out.status.code(), Some(6), "{value}");
+    assert_eq!(value["error"]["kind"], "input");
+    assert_eq!(staged(d.path(), &[]), "");
 }
 
 /// From a subdirectory, hunks in files outside it are still staged: git runs at the top level
@@ -191,7 +245,9 @@ async fn clean_tree_is_an_input_error_with_a_hint() {
     let mut c = common::jevify(&server);
     c.current_dir(d.path());
     let out = tokio::task::spawn_blocking(move || {
-        c.args(["--json", "add", "anything"]).output().unwrap()
+        c.args(["--json", "add", "--yes", "anything"])
+            .output()
+            .unwrap()
     })
     .await
     .unwrap();

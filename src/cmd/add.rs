@@ -21,6 +21,25 @@ pub async fn run(
     dry_run: bool,
     machine: bool,
 ) -> Result<Outcome, JevifyError> {
+    // Staging needs --yes or a terminal, before reading the diff or paying for inference.
+    let terminal = || {
+        std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open("/dev/tty")
+            .is_ok()
+    };
+    if !yes && !dry_run && (machine || !terminal()) {
+        return Err(JevifyError::Kinded {
+            kind: "usage",
+            exit: Exit::Usage,
+            message:
+                "add needs --yes or a terminal for confirmation; nothing was classified or staged"
+                    .into(),
+            hint: "pass --yes to stage, or --dry-run to score the hunks",
+            example: "jevify add --dry-run \"the token expiry fix\"",
+        });
+    }
     // The two reads change nothing, so they run under the lister deadline; staging does not.
     let git = |dir: &Path, args: &[&str]| {
         let mut command = Command::new("git");
@@ -70,24 +89,6 @@ pub async fn run(
         return Err(JevifyError::InputTooLarge(format!(
             "hunk exceeds the {HUNK_CHARS}-character evidence budget; no hunks were classified or staged"
         )));
-    }
-    // Staging needs a yes: --yes, or a terminal to ask on. Without either, stop before any
-    // request, so an unattended caller learns the fix without paying for a classification.
-    let terminal = || {
-        std::fs::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open("/dev/tty")
-            .is_ok()
-    };
-    if !yes && !dry_run && (machine || !terminal()) {
-        return Err(JevifyError::Kinded {
-            kind: "declined",
-            exit: Exit::Interrupted,
-            message: "add stages only with --yes, or after a yes on a terminal, and there is none; nothing was classified or staged".into(),
-            hint: "pass --yes to stage, or --dry-run to score the hunks",
-            example: "jevify add --dry-run \"the token expiry fix\"",
-        });
     }
     let client = Client::new(ctx)?;
     let file_name = |fi: usize| {
@@ -190,15 +191,21 @@ pub async fn run(
             exec: None,
         });
     }
-    // Machine mode requires --yes; humans confirm on /dev/tty (no TTY → declined, nothing staged).
-    if !yes
-        && (machine
-            || !matches!(
-                crate::cmd::confirm_tty(&format!("{summary}Stage {n} hunk(s)? [y/N] "))?,
-                Some(true)
-            ))
-    {
-        return Err(JevifyError::Declined);
+    if !yes {
+        match crate::cmd::confirm_tty(&format!("{summary}Stage {n} hunk(s)? [y/N] "))? {
+            Some(true) => {}
+            Some(false) => return Err(JevifyError::Declined),
+            None => {
+                return Err(JevifyError::Kinded {
+                    kind: "usage",
+                    exit: Exit::Usage,
+                    message: "add needs --yes or a terminal for confirmation; nothing was staged"
+                        .into(),
+                    hint: "pass --yes to stage, or --dry-run to score the hunks",
+                    example: "jevify add --dry-run \"the token expiry fix\"",
+                });
+            }
+        }
     }
     let keep = |fi: usize, hi: usize| {
         flat.iter()

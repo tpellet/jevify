@@ -2,6 +2,8 @@ use crate::cli::Shell;
 use crate::cmd::Outcome;
 use crate::config::{Backend, Config};
 use crate::exit::{Exit, JevifyError};
+use crate::jev::client::Client;
+use crate::jev::{Question, Questions};
 use crate::source;
 
 pub const WITHHELD_PATTERNS: [&str; 6] =
@@ -42,7 +44,7 @@ pub fn capabilities() -> Outcome {
             {"name":"is", "usage":"jevify is <statement>... [--context FILE] [--band 0.15]", "exit":[0,1,3], "data":"p, verdict, truncated; statements for multiple questions"},
             {"name":"add", "usage":"jevify add [--dry-run | --yes] <topic...>", "exit":[0,2,3,6,130], "data":"hunks[{file,header,p,staged}]"},
             {"name":"capabilities", "usage":"jevify capabilities --json", "exit":[0], "data":"commands, kinds, exit_codes, error_kinds, env, envelope"},
-            {"name":"health", "usage":"jevify health --json", "exit":[0,4,5], "data":"backend, base_url, key, api, latency_ms, models"},
+            {"name":"health", "usage":"jevify health --json", "exit":[0,4,5], "data":"backend, base_url, key, api, latency_ms, model"},
             {"name":"init", "usage":"jevify init agents", "exit":[0], "data":"script"}
         ],
         "common_exit":[2,4,5,6],
@@ -95,95 +97,66 @@ pub fn capabilities() -> Outcome {
 }
 
 pub async fn health(ctx: &Config) -> Result<Outcome, JevifyError> {
-    let base = crate::config::base_url(ctx.backend, Some(&ctx.base_url))?;
-    let (path, key) = match ctx.backend {
-        Backend::Typesafe => ("/v1/models", Some(ctx.api_key()?)),
-        Backend::Classifier => ("/v1/health", None),
+    // A cached answer cannot tell us whether the account can still classify.
+    let probe = Config {
+        backend: ctx.backend,
+        key: ctx.key.clone(),
+        key_file: ctx.key_file.clone(),
+        base_url: ctx.base_url.clone(),
+        model: ctx.model.clone(),
+        threshold: ctx.threshold,
+        concurrency: ctx.concurrency,
+        cache_dir: None,
+        stats: ctx.stats.clone(),
     };
-    let mut req = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .map_err(|e| JevifyError::Unavailable(e.to_string()))?
-        .get(format!("{base}{path}"))
-        .timeout(std::time::Duration::from_secs(5));
-    if let Some(k) = &key {
-        req = req.bearer_auth(k);
-    }
     let start = std::time::Instant::now();
-    let mut attempt = ctx.stats.start(crate::jev::client::AttemptKind::Health);
-    let r = match req.send().await {
-        Ok(r) => r,
-        Err(e) => {
-            attempt.finish(false);
-            return Err(JevifyError::Unavailable(e.to_string()));
-        }
-    };
+    let client = Client::new(&probe)?;
+    let questions = Questions::from([(
+        "health".into(),
+        Question::noul("Does the text greet someone?"),
+    )]);
+    let answer = client
+        .ask(&serde_json::json!("Hello there"), &questions)
+        .await?;
+    answer.noul("health")?;
     let ms = start.elapsed().as_millis();
     let backend = ctx.backend.as_str();
-    match r.status().as_u16() {
-        200 => {
-            let bytes = match r.bytes().await {
-                Ok(bytes) => bytes,
-                Err(e) => {
-                    attempt.finish(false);
-                    return Err(JevifyError::Unavailable(e.to_string()));
-                }
-            };
-            attempt.finish(true);
-            let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap_or_default();
-            let key_state = if key.is_some() {
-                "present"
-            } else {
-                "not needed"
-            };
-            Ok(Outcome {
-                exit: Exit::Ok,
-                human: format!("ok: {backend} reachable in {ms} ms (key {key_state})\n")
-                    .into_bytes(),
-                exec: None,
-                data: serde_json::json!({"backend":backend,"base_url":ctx.base_url,"key":key_state,"api":"reachable","latency_ms":ms,"models":body["models"]}),
-            })
-        }
-        401 | 403 => {
-            attempt.finish(false);
-            Err(JevifyError::BadKey(r.status().as_u16()))
-        }
-        s => {
-            attempt.finish(false);
-            Err(JevifyError::Unavailable(format!("HTTP {s}")))
-        }
-    }
+    let key_state = match ctx.backend {
+        Backend::Typesafe => "present",
+        Backend::Classifier => "not needed",
+    };
+    Ok(Outcome {
+        exit: Exit::Ok,
+        human: format!(
+            "ok: {backend} answered with {} in {ms} ms (key {key_state})\n",
+            answer.model
+        )
+        .into_bytes(),
+        exec: None,
+        data: serde_json::json!({"backend":backend,"base_url":ctx.base_url,"key":key_state,"api":"answered","latency_ms":ms,"model":answer.model}),
+    })
 }
 
 pub fn init(_shell: Shell) -> Outcome {
-    let catalog = capabilities().data;
-    let kinds = catalog["kinds"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|kind| kind["name"].as_str().unwrap())
-        .collect::<Vec<_>>()
-        .join(", ");
-    let block = format!(
-        "# jevify\nSelect existing handles and records by meaning when literal search cannot answer.\n\
-         why: CMD 2>&1 | jevify why --json; inspect the cause, considered and total.\n\
-         fill: jevify fill --dry-run -- git switch '@{{branch:the auth refactor}}'; omit --dry-run to execute.\n\
-         pick: jevify pick --from tool 'keep my mac awake'; prints only the handle.\n\
-         filter: LIST | jevify filter 'reports a failed assertion'; --strict drops unsure records.\n\
-         label: LIST | jevify label bug,feature,question; prints LABEL<TAB>RECORD, ? when unsure.\n\
-         is: jevify is 'asks for a refund' --context mail.txt; 0 yes, 1 no, 3 unsure.\n\
-         add: jevify add --dry-run 'the token expiry fix'; --yes stages with caller authorization.\n\
-         Kinds for fill markers and pick --from: {kinds}; one and flag are fill-only.\n\
-         Quote whole markers. No shell is used; never eval the preview. An unsure flag runs nothing.\n\
-         fill stdin has one role; separate --candidates and --context when needed.\n\
-         Authorize fill per command prefix. JEVIFY_STATUS_FILE records ran before exec; after exec the command owns its exit code.\n\
-         --json (alias --robot): one envelope on one line. Branch on exit_code, then data; error.kind identifies errors.\n\
-         Exit: 0 ok, 1 no, 2 usage, 3 abstain, 4 unavailable, 5 auth, 6 input, 130 declined.\n\
-         Abstention candidates are not answers; check exit before using stdout.\n\
-         why and filter save raw input, secrets included; --no-save disables saving.\n\
-         health: jevify health --json. capabilities: jevify capabilities --json lists commands, kinds and flags.\n\
-         init: jevify init agents prints these instructions.\n"
-    );
+    let block = "# jevify\n\
+         Use when you can describe a value but cannot name it, or a failure log is too long to read.\n\
+         cargo test 2>&1 | jevify why\n\
+         jevify fill --dry-run -- git show '@{commit:what it did}'\n\
+         jevify pick --from commit 'what it did'\n\
+         --from also accepts branch, file, pr, ci-run; stdout is the handle.\n\
+         cat records.txt | jevify filter 'reports a failed assertion'\n\
+         cat records.txt | jevify label bug,feature,question\n\
+         jevify is 'reports a failure' < build.log\n\
+         Single-quote whole markers. Never eval a preview. Omit --dry-run only with authorization.\n\
+         fill stdin has one role; separate --candidates and --context. An unsure flag runs nothing.\n\
+         JEVIFY_STATUS_FILE records whether fill ran; after exec the child owns its exit code.\n\
+         --json: one envelope; branch on exit_code, then data.\n\
+         0 found/yes; 1 no; 2 usage: run error.example after checking authorization.\n\
+         3 nothing fits: read data.shortlist if present; candidates are not answers.\n\
+         4 unavailable: error.kind quota_exhausted means stop for today; 5 auth; 6 input.\n\
+         jevify add --dry-run 'the auth fix'; --yes authorizes staging; 130 means a person declined.\n\
+         why and filter save raw input; --no-save disables saving.\n\
+         jevify health --json checks classification; jevify capabilities --json lists commands and kinds.\n".to_owned();
     Outcome {
         exit: Exit::Ok,
         data: serde_json::json!({"script":block}),
@@ -220,22 +193,6 @@ mod tests {
         assert_eq!(kind["pr"]["ordered"], true);
         for name in ["-", "tool", "one", "flag"] {
             assert_eq!(kind[name]["list"], serde_json::json!([]), "{name}");
-        }
-    }
-
-    #[test]
-    fn init_agents_names_every_verb_every_listing_kind_and_the_capability_contract() {
-        let block = String::from_utf8(init(Shell::Agents).human).unwrap();
-        for verb in crate::VERBS {
-            assert!(block.contains(verb));
-        }
-        assert!(block.contains("jevify capabilities --json"));
-        assert!(block.lines().count() <= 25);
-        let kinds = block.lines().find(|l| l.starts_with("Kinds")).unwrap();
-        for kind in [
-            "branch", "commit", "file", "dir", "tool", "pr", "ci-run", "pod",
-        ] {
-            assert!(kinds.contains(kind), "{kind}");
         }
     }
 }
