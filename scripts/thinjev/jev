@@ -1,0 +1,56 @@
+#!/usr/bin/env python3
+"""jev: the thinnest keyless Jev client, a baseline for jevify.
+
+    jev "question" opt1 opt2 ...        options as arguments
+    printf 'a\nb\n' | jev "question"    options as stdin lines
+
+One POST to https://classifier.dev/v1/classify (the request shape of
+src/jev/classifier.rs): the question is the one item, the options are the labels
+of one dimension. Prints every option ranked, `p<TAB>option`. No listers, no
+evidence, no rounds, no threshold, no abstention: the top line is the guess.
+Exit 2 on bad input, 4 when the service fails.
+"""
+import json
+import sys
+import urllib.error
+import urllib.request
+
+URL = "https://classifier.dev/v1/classify"
+MAX_LABELS, MAX_LABEL_CHARS, MAX_INPUT_CHARS = 100, 200, 32_000
+
+
+def u16(s):
+    return len(s.encode("utf-16-le")) // 2
+
+
+def fail(msg, code=2):
+    print(f"jev: {msg}", file=sys.stderr)
+    sys.exit(code)
+
+
+if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
+    fail('usage: jev "question" opt1 opt2 ...   (or options as stdin lines)')
+question = sys.argv[1]
+opts = sys.argv[2:] or ([l.strip() for l in sys.stdin if l.strip()] if not sys.stdin.isatty() else [])
+if not question.strip() or u16(question) > MAX_INPUT_CHARS:
+    fail(f"question must be 1..{MAX_INPUT_CHARS} characters")
+if not 2 <= len(opts) <= MAX_LABELS:
+    fail(f"need 2..{MAX_LABELS} options, got {len(opts)}")
+if len(set(opts)) != len(opts):
+    fail("options must be distinct")
+if any(u16(o) > MAX_LABEL_CHARS for o in opts):
+    fail(f"each option must be at most {MAX_LABEL_CHARS} characters")
+body = {"items": [question], "dimensions": {"answer": {
+    "labels": opts, "instructions": "Choose the option that best answers the question."}}}
+req = urllib.request.Request(URL, json.dumps(body).encode(), method="POST", headers={
+    "content-type": "application/json", "user-agent": "thinjev/1"})
+try:
+    with urllib.request.urlopen(req, timeout=60) as r:
+        dim = json.load(r)["results"][0]["dimensions"]["answer"]
+except urllib.error.HTTPError as e:
+    fail(f"HTTP {e.code}: {e.read().decode('utf-8', 'replace')[:300]}", 4)
+except (urllib.error.URLError, TimeoutError, ValueError, KeyError, IndexError) as e:
+    fail(f"unavailable: {e!r}", 4)
+scores = dim.get("scores") or {dim.get("label"): dim.get("confidence")}
+for opt, p in sorted(scores.items(), key=lambda kv: -(kv[1] or 0)):
+    print(f"{(p or 0):.3f}\t{opt}")
