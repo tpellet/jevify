@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.14.0 - 2026-09-28
+
 Changed:
 
 - The call shapes coding agents write work. A description is one quoted argument or several
@@ -61,8 +63,6 @@ Measured:
   Token reduction describes downstream payload, not total inference cost or agent task success.
 - On the same date and backend, `fill` resolves bat PR #4018 among 1,000 open and closed PRs
   in 6.9 s, with 424× fewer bytes than reading the listing.
-
-## 0.14.0 - 2026-09-28
 
 Documents:
 
