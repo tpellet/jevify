@@ -28,6 +28,7 @@ request for advice. No counting, arithmetic, date comparisons or quality judgmen
 works best.
 
 ```sh
+jevify pick --from commit 'the commit that renamed the project'
 gh run view --log-failed | jevify why --json
 git log --oneline | jevify pick --json 'the commit that renamed the project'
 fd -0 -e txt | jevify filter -0 --files 'asks for a refund'
@@ -44,16 +45,39 @@ records that do not say, so its output carries the unsure ones and `U unsure` on
 counts them; `--strict` keeps only the records where the statement holds. Check a `pick` call's exit before using its output as an
 argument; unchecked substitution can turn abstention into an empty argument.
 
+## Argument shapes
+
+A description is one quoted argument or several bare words: `jevify pick --from commit names
+the borrow in the return type` is the quoted call. This holds for the intent of `pick`, `route`
+and `add` and the statement of `filter`; `is` reads each argument as one statement, so
+quote a sentence; three or more one-word statements get a warning on stderr. A leading `-` is ignored, since stdin is already
+the default source. A verb's options may come before the verb (`jevify --no-save why`).
+`-C DIR` (`--repo DIR`) runs `fill` or `pick` as if started in DIR, and `fill` runs its listers
+where a `git -C DIR` command points. `pick --files` with nothing on stdin ranks the files under
+the current directory (`git ls-files`, or a walk outside a work tree) and says so in one stderr
+line.
+
+Every error names a command to run next, the caller's own corrected when jevify can: stderr ends
+with `try:` and the envelope carries it in `error.example`. `jevify label bug feature` answers
+`try:  jevify label bug,feature`; a `commit` lister run outside a repository answers with the
+directory it ran in, the repositories below it and `jevify pick -C work/hyper --from commit
+'...'`; an unknown verb names the nearest verb, the installed version and `cargo install
+jevify`. An abstention names its nearest candidates as `nearest (not chosen)`, with their
+scores and a hint (`pick`, `why`, `add`, `fill`, and `route` on its own lines); `is` prints its
+`p` and band. The nearest candidates are never the answer: exit 3 means nothing was chosen.
+`pick`'s envelope carries them as `data.closest[{text,p}]` with `data.hint`.
+
 ## Verbs and data
 
-- `fill [--dry-run] [-q] [--candidates FILE] [--context FILE] [--field N | --key KEY]
+- `fill [--dry-run] [-q] [-C DIR] [--candidates FILE] [--context FILE] [--field N | --key KEY]
   [-0 | --para] -- COMMAND ARGS...` resolves every marker or runs nothing. Data:
   `argv` on successful dry run, `markers[{arg,kind,reason,handle,p,candidates,total,omitted}]`,
   `reason`. Machine formats require `--dry-run`. The command inherits the environment and
   directory, and owns output, signals and exit code. Consumed stdin becomes empty for it.
   `JEVIFY_STATUS_FILE` records whether the command started; see [The exec status](#the-exec-status).
-- `pick '<intent>' [-n N] [--index | --files] [-0 | --para]` reads stdin records.
-  Data: `matches[{line,text,ordinal,p,lossy?}]`, `any`, `source`. Exit 0 found, 3 nothing fits.
+- `pick '<intent>' [-n N] [--index | --files] [-0 | --para] [-C DIR]` reads stdin records.
+  Data: `matches[{line,text,ordinal,p,lossy?}]`, `any`, `source`; an abstention adds
+  `closest[{text,p}]` and `hint`. Exit 0 found, 3 nothing fits.
   `--files` is boolean: `git ls-files | jevify pick --files 'where man pages are parsed'`.
   Paths are ranked first, then eligible excerpts of at most 24 finalists. Input is not saved.
   `pick --from KIND '<intent>' [-n N]` lists a kind's candidates (`branch`, `commit`, `file`,
@@ -95,7 +119,8 @@ argument; unchecked substitution can turn abstention into an empty argument.
 - `add '<topic>' [--dry-run | --yes]` scores tracked unstaged hunks. Data:
   `hunks[{file,header,p,staged}]`. Exit 0 scored or staged, 3 no match, 6 empty or oversized,
   130 declined. Machine mode stages only with `--yes`; never commits.
-- `sort <DIR> [--into ROOT] [--apply | --undo LOG]` proposes existing folders.
+- `sort <DIR> [--into ROOT] [--apply | --undo LOG]` proposes existing folders; a FILE in place
+  of DIR is sorted alone among the folders beside it or under `--into`.
   Data: `moves[{from,to,p}]`, `skipped[{file,reason}]`, `undo_log`, `applied`. Exit 0 success,
   3 nothing placed or restored, 6 input error. Moves require `--apply` or `--undo`; no prompt.
   Atomic no-replace moves and a unique JSONL recovery journal protect occupied destinations; the
@@ -164,8 +189,14 @@ unauthenticated tool is exit 6 `lister_failed` with its own text. `--field N` is
 whitespace field; `--key KEY` extracts a JSON handle while retaining the record as evidence.
 The `fill` status line of a resolved marker reads
 `candidates N[ of M[, newest first]][, omitted K], windows W[, excerpts withheld: E]`; the
-`not run:` line of an abstention reads `candidates N of M, omitted K`, both parts always
-present and no window count.
+`not run:` line of an abstention names the `nearest (not chosen)` candidates, then reads
+`candidates N of M, omitted K`, both parts always present and no window count, and ends with
+`; hint: ...` unless `-q`.
+A bare `@{branch:...}` substitutes the short name, which `git switch`, `checkout` and `push`
+take. In a git subcommand that reads a revision (`log`, `show`, `diff`, `rev-parse`,
+`rev-list`, `blame`, ...), a branch that exists only on a remote becomes its remote ref
+(`origin/x`) when the short name does not resolve and the remote ref does, and stderr says so;
+`origin/@{branch:...}` asks for the remote ref outright.
 The last stderr line is `jevify fill: exec <quoted argv>` in a run, `jevify fill: would run
 <quoted argv>` under `--dry-run`, or `jevify fill: not run: <reason>` when nothing ran; only
 `exec` means the command started.
@@ -203,10 +234,10 @@ no, unsure and errors. Under `git bisect run`, map unsure exit 3 to 125.
 | 0 | yes, found or successful operation |
 | 1 | `is`: any no; `filter`: kept none |
 | 2 | usage error: read the corrected command in `error.example` |
-| 3 | nothing fits or unsure: inspect evidence; do not retry until it agrees; `filter` and `label`: every record unsure |
+| 3 | nothing fits or unsure: nothing was chosen; stderr names the nearest candidates, not chosen, and a hint; do not retry until it agrees; `filter` and `label`: every record unsure |
 | 4 | unavailable or quota exhausted: read the error |
 | 5 | missing or rejected TypeSafe key |
-| 6 | empty, oversized or unreadable input; `too_many`: narrow with `grep` or `head` |
+| 6 | empty, oversized or unreadable input: run the command in `error.example`; `too_many`: narrow with `grep` or `head` |
 | 7 | reserved |
 | 130 | declined at `add` confirmation |
 

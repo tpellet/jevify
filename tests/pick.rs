@@ -194,13 +194,15 @@ fn from_kind_validation_and_lister_failure() {
     let root = tempfile::tempdir().unwrap().keep();
     for (kind, exit, message) in [
         ("branc", 2, "branch"),
-        ("-", 2, "default source"),
+        // `--from -` names stdin, the default source: here it is empty.
+        ("-", 6, "empty_input"),
         ("branch", 6, "lister_failed"),
     ] {
         let out = common::bin()
             .current_dir(&root)
             .env("GIT_CEILING_DIRECTORIES", &root)
             .args(["--json", "pick", "--from", kind, "x"])
+            .write_stdin("")
             .output()
             .unwrap();
         assert_eq!(out.status.code(), Some(exit));
@@ -884,7 +886,12 @@ async fn files_mode_rejects_index_and_empty_input_and_abstains_honestly() {
     let root = dir.path().to_str().unwrap().to_string();
     let run = |args: Vec<String>, input: &str| {
         let mut c = common::jevify(&server);
-        c.args(args).write_stdin(input).output().unwrap()
+        c.current_dir(dir.path())
+            .env("GIT_CEILING_DIRECTORIES", dir.path())
+            .args(args)
+            .write_stdin(input)
+            .output()
+            .unwrap()
     };
     let v = |o: &std::process::Output| -> serde_json::Value {
         serde_json::from_slice(&o.stdout).unwrap()
@@ -897,16 +904,21 @@ async fn files_mode_rejects_index_and_empty_input_and_abstains_honestly() {
     let out = run(args(&["--index", "x"]), "a.txt\n");
     assert_eq!(out.status.code(), Some(2));
     assert_eq!(v(&out)["error"]["kind"], "usage");
-    // No piped paths: nothing to choose from, even if files exist on disk.
-    std::fs::write(dir.path().join(".env"), "x").unwrap();
+    // No piped paths and no file in the directory: nothing to choose from, and no request.
     let out = run(args(&["x"]), "");
     assert_eq!(out.status.code(), Some(6));
     assert_eq!(v(&out)["error"]["kind"], "empty_input");
     assert_eq!(v(&out)["meta"]["requests"], 0);
+    // No piped paths: the directory's files are ranked, a secret-looking one without excerpt.
+    std::fs::write(dir.path().join(".env"), "SECRET=1").unwrap();
+    let out = run(args(&["x"]), "");
+    assert_eq!(out.status.code(), Some(3));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("ranking the 1 files"));
     std::fs::write(dir.path().join("a.txt"), "x").unwrap();
     let out = run(args(&["a spaceship"]), &format!("{root}/a.txt\n"));
     assert_eq!(out.status.code(), Some(3));
     assert_eq!(v(&out)["data"]["matches"], serde_json::json!([]));
+    // A word after --files is part of the description, not a directory to list.
     let out = run(
         vec![
             "--json".into(),
@@ -917,8 +929,27 @@ async fn files_mode_rejects_index_and_empty_input_and_abstains_honestly() {
         ],
         "a.txt\n",
     );
-    assert_eq!(out.status.code(), Some(2));
-    assert_eq!(v(&out)["error"]["kind"], "usage");
+    assert_eq!(out.status.code(), Some(3));
+    assert!(
+        String::from_utf8_lossy(
+            &server
+                .received_requests()
+                .await
+                .unwrap()
+                .last()
+                .unwrap()
+                .body
+        )
+        .contains("/missing x")
+    );
+    assert!(
+        !server
+            .received_requests()
+            .await
+            .unwrap()
+            .iter()
+            .any(|r| String::from_utf8_lossy(&r.body).contains("SECRET=1"))
+    );
 }
 
 /// A fake `git` for `commit` (full 40-hex OIDs, newest first, `commits` of them) and `file`
@@ -1139,4 +1170,290 @@ async fn unreadable_file_finalists_are_counted_and_named() {
             .any(|line| line == "jevify pick: excerpt unreadable: bills: is a directory"),
         "{stderr}"
     );
+}
+
+/// A real git work tree in a fresh directory, with two commits: `README` then `src/slab.go`.
+fn git_repo() -> std::path::PathBuf {
+    let root = tempfile::tempdir().unwrap().keep().canonicalize().unwrap();
+    let git = |args: &[&str]| {
+        let status = std::process::Command::new("git")
+            .current_dir(&root)
+            .args(["-c", "user.name=t", "-c", "user.email=t@example.com"])
+            .args(args)
+            .stdout(std::process::Stdio::null())
+            .status()
+            .unwrap();
+        assert!(status.success(), "git {args:?}");
+    };
+    git(&["init", "-q"]);
+    std::fs::write(root.join("README"), "readme\n").unwrap();
+    git(&["add", "README"]);
+    git(&["commit", "-qm", "Add the readme"]);
+    std::fs::create_dir(root.join("src")).unwrap();
+    std::fs::write(
+        root.join("src/slab.go"),
+        "type Slab struct { I16 []int16 }\n",
+    )
+    .unwrap();
+    git(&["add", "src/slab.go"]);
+    git(&["commit", "-qm", "Add pre-allocated integer buffers"]);
+    root
+}
+
+async fn requests_of(server: &wiremock::MockServer) -> Vec<serde_json::Value> {
+    server
+        .received_requests()
+        .await
+        .unwrap()
+        .iter()
+        .map(|r| serde_json::from_slice(&r.body).unwrap())
+        .collect()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn unquoted_words_are_one_intent_and_a_leading_dash_is_stdin() {
+    let server = common::mock(FakeJev {
+        choose: |_, s, o| option_containing(s, o, "fix-319"),
+        noul: |_, _| 0.9,
+    })
+    .await;
+    for args in [
+        vec!["pick", "stops", "meaningless", "figures"],
+        vec!["pick", "-", "stops", "meaningless", "figures"],
+        vec!["pick", "stops meaningless figures"],
+        vec!["pick", "stops", "meaningless", "figures", "-n", "1"],
+        vec!["pick", "-", "stops meaningless figures"],
+    ] {
+        let mut cmd = common::jevify(&server);
+        let out = tokio::task::spawn_blocking(move || {
+            cmd.args(&args)
+                .write_stdin("main\nfix-319\n")
+                .output()
+                .unwrap()
+        })
+        .await
+        .unwrap();
+        assert_eq!(out.status.code(), Some(0), "{out:?}");
+        assert_eq!(out.stdout, b"fix-319\n");
+    }
+    for request in requests_of(&server).await {
+        assert_eq!(request["state"]["request"], "stops meaningless figures");
+    }
+    // One word works too; `-` alone describes nothing.
+    let mut cmd = common::jevify(&server);
+    tokio::task::spawn_blocking(move || {
+        cmd.args(["pick", "fix"])
+            .write_stdin("fix-319\n")
+            .assert()
+            .code(0);
+    })
+    .await
+    .unwrap();
+    let out = common::bin()
+        .args(["--json", "pick", "-"])
+        .write_stdin("a\n")
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(2));
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v["error"]["kind"], "usage");
+    assert_eq!(
+        v["error"]["example"],
+        "jevify --json pick '<what the line you want says>'"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn files_without_stdin_rank_the_working_directory_and_say_so() {
+    let server = common::mock(FakeJev {
+        choose: |_, s, o| option_containing(s, o, "slab.go"),
+        noul: |_, _| 0.9,
+    })
+    .await;
+    let repo = git_repo();
+    // Untracked files are listed too; ignored ones are not.
+    std::fs::write(repo.join(".gitignore"), "build/\n").unwrap();
+    std::fs::create_dir(repo.join("build")).unwrap();
+    std::fs::write(repo.join("build/slab.go"), "generated\n").unwrap();
+    for input in ["", "\n  \n"] {
+        let mut cmd = common::jevify(&server);
+        cmd.current_dir(&repo);
+        let out = tokio::task::spawn_blocking(move || {
+            cmd.args([
+                "pick",
+                "--files",
+                "defines",
+                "pre-allocated",
+                "integer",
+                "buffers",
+            ])
+            .write_stdin(input)
+            .output()
+            .unwrap()
+        })
+        .await
+        .unwrap();
+        assert_eq!(out.status.code(), Some(0), "{out:?}");
+        assert_eq!(out.stdout, b"src/slab.go\n");
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            stderr.contains(
+                "jevify pick: no paths on stdin; ranking the 3 files under the current directory"
+            ),
+            "{stderr}"
+        );
+    }
+    let items = requests_of(&server).await[0]["state"]["items"].to_string();
+    assert!(
+        items.contains("README") && !items.contains("build/"),
+        "{items}"
+    );
+    // An empty directory has nothing to rank: exit 6, and no request.
+    let empty = tempfile::tempdir().unwrap().keep();
+    let before = requests_of(&server).await.len();
+    let mut cmd = common::jevify(&server);
+    cmd.current_dir(&empty)
+        .env("GIT_CEILING_DIRECTORIES", &empty)
+        .args(["--json", "pick", "--files", "x"])
+        .write_stdin("");
+    let out = tokio::task::spawn_blocking(move || cmd.output().unwrap())
+        .await
+        .unwrap();
+    assert_eq!(out.status.code(), Some(6));
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v["error"]["kind"], "empty_input");
+    assert!(
+        v["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("no files under the current directory")
+    );
+    assert_eq!(requests_of(&server).await.len(), before);
+    // Without --files, empty stdin stays an input error, and its example is a pipe.
+    let out = common::bin()
+        .args(["pick", "the", "fix"])
+        .write_stdin("")
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(6));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("try:  git log --oneline | jevify pick 'the fix'"),
+        "{stderr}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_abstention_names_the_nearest_as_not_chosen_with_a_hint() {
+    let server = common::mock(
+        FakeJev {
+            choose: |_, _, _| "NONE".into(),
+            noul: |_, _| 0.1,
+        }
+        .with_probabilities(|_, _, options| {
+            if options == ["yes", "no"] {
+                return vec![0.1, 0.9];
+            }
+            options
+                .iter()
+                .map(|o| match o.as_str() {
+                    "L000" => 0.27,
+                    "L001" => 0.03,
+                    _ => 0.7,
+                })
+                .collect()
+        }),
+    )
+    .await;
+    for machine in [false, true] {
+        let mut cmd = common::jevify(&server);
+        if machine {
+            cmd.arg("--json");
+        }
+        let out = tokio::task::spawn_blocking(move || {
+            cmd.args(["pick", "a", "spaceship"])
+                .write_stdin("alpha\nbeta\n")
+                .output()
+                .unwrap()
+        })
+        .await
+        .unwrap();
+        assert_eq!(out.status.code(), Some(3));
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            stderr.contains("jevify pick: no_match; nearest (not chosen): alpha (0.27), beta (0.03); hint: nothing fits better than none (0.70)"),
+            "{stderr}"
+        );
+        if machine {
+            let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+            assert_eq!(v["data"]["matches"], serde_json::json!([]));
+            assert_eq!(v["data"]["closest"][0]["text"], "alpha");
+            assert_eq!(v["data"]["closest"][0]["p"], 0.27);
+            assert!(v["data"]["hint"].as_str().unwrap().contains("none (0.70)"));
+        } else {
+            assert!(out.stdout.is_empty());
+        }
+    }
+}
+
+#[test]
+fn from_outside_a_repository_names_the_one_below_and_dash_c_runs_there() {
+    let parent = tempfile::tempdir().unwrap().keep().canonicalize().unwrap();
+    let repo = git_repo();
+    std::fs::create_dir(parent.join("work")).unwrap();
+    std::fs::rename(&repo, parent.join("work/hyper")).unwrap();
+    let out = common::bin()
+        .current_dir(&parent)
+        .env("GIT_CEILING_DIRECTORIES", &parent)
+        .args(["pick", "--from", "commit", "names", "the", "borrow"])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(6));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("repositories below it: work/hyper"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("try:  jevify pick -C work/hyper --from commit 'names the borrow'"),
+        "{stderr}"
+    );
+    assert_eq!(stderr.lines().count(), 3, "{stderr}");
+    // A -C that names no directory is an input error whose example drops it.
+    let out = common::bin()
+        .current_dir(&parent)
+        .args(["--json", "pick", "-C", "nowhere", "--from", "commit", "x"])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(6));
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v["error"]["kind"], "input");
+    assert_eq!(v["error"]["example"], "jevify --json pick --from commit x");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn dash_c_lists_the_named_repository() {
+    let server = common::mock(FakeJev {
+        choose: |_, s, o| option_containing(s, o, "integer buffers"),
+        noul: |_, _| 0.9,
+    })
+    .await;
+    let parent = tempfile::tempdir().unwrap().keep().canonicalize().unwrap();
+    let repo = git_repo();
+    let dir = repo.to_str().unwrap().to_owned();
+    for args in [
+        vec!["pick", "-C", &dir, "--from", "commit", "the", "buffers"],
+        // A verb option written before the verb is read as the verb's.
+        vec!["--from", "commit", "pick", "--repo", &dir, "the buffers"],
+    ] {
+        let args: Vec<String> = args.into_iter().map(str::to_owned).collect();
+        let mut cmd = common::jevify(&server);
+        cmd.current_dir(&parent)
+            .env("GIT_CEILING_DIRECTORIES", &parent);
+        let out = tokio::task::spawn_blocking(move || cmd.args(&args).output().unwrap())
+            .await
+            .unwrap();
+        assert_eq!(out.status.code(), Some(0), "{out:?}");
+        assert_eq!(String::from_utf8_lossy(&out.stdout).trim().len(), 40);
+    }
 }

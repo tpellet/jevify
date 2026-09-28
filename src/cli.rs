@@ -67,19 +67,23 @@ pub enum Cmd {
         nul: bool,
         #[arg(long)]
         para: bool,
+        /// Run as if started in DIR: listers, excerpts and the command
+        #[arg(short = 'C', long = "repo", value_name = "DIR")]
+        repo: Option<std::path::PathBuf>,
         #[arg(last = true, required = true)]
         cmd: Vec<std::ffi::OsString>,
     },
     /// Find one line in a list by describing it: stdin lines in, the matching line out
     #[command(
-        after_help = "Examples:\n  git branch | jevify pick \"the payment timeout fix\"\n  git log --oneline | jevify pick -n 3 \"when we changed the pricing\"\n  git ls-files | jevify pick --files \"where man pages are parsed\"\n\nThe description and the record need no word in common. --files ranks stdin paths first, then reads excerpts of the finalists; hidden or secret-looking paths and symlink files receive no excerpt, and a file that cannot be read (missing, a directory, denied) is named on stderr; both count in excerpts withheld: N. Selected records keep their bytes and input order. Input is not saved.\nExit: 0 found, 3 no record fits. --json data: matches[{line, text, ordinal, p, lossy?}], any, source. Non-UTF-8 records have lossy: true."
+        after_help = "Examples:\n  git branch | jevify pick \"the payment timeout fix\"\n  git log --oneline | jevify pick -n 3 \"when we changed the pricing\"\n  git ls-files | jevify pick --files \"where man pages are parsed\"\n  jevify pick --from commit made folder moves atomic\n\nThe description and the record need no word in common; quote it or leave it as words. --files ranks stdin paths first (with nothing on stdin, the files under the current directory), then reads excerpts of the finalists; hidden or secret-looking paths and symlink files receive no excerpt, and a file that cannot be read (missing, a directory, denied) is named on stderr; both count in excerpts withheld: N. Selected records keep their bytes and input order. Input is not saved.\nExit: 0 found, 3 no record fits. --json data: matches[{line, text, ordinal, p, lossy?}], any, source. Non-UTF-8 records have lossy: true."
     )]
     Pick {
         /// List candidates of this kind instead of reading stdin
         #[arg(long, conflicts_with_all = ["files", "index", "nul", "para"])]
         from: Option<String>,
-        /// Describe the line you want, e.g. "the branch with the payment timeout fix"
-        intent: String,
+        /// Describe the line you want, e.g. "the branch with the payment timeout fix"; unquoted words are joined
+        #[arg(required = true, num_args = 1.., value_name = "INTENT")]
+        intent: Vec<String>,
         /// Print up to N matches, each ranked above "nothing fits"
         #[arg(short = 'n', long, default_value_t = 1)]
         top: usize,
@@ -95,6 +99,9 @@ pub enum Cmd {
         /// Split stdin into paragraphs
         #[arg(long)]
         para: bool,
+        /// Run as if started in DIR: the --from lister, the --files listing and excerpts
+        #[arg(short = 'C', long = "repo", value_name = "DIR")]
+        repo: Option<std::path::PathBuf>,
     },
     /// Find the line that caused a failure in build, test or CI output on stdin
     #[command(
@@ -125,7 +132,9 @@ pub enum Cmd {
         after_help = "Example:\n  cargo test 2>&1 | jevify filter 'reports a failed assertion'\n\n-v inverts; -c prints the count. Unsure records stay unless --strict. --verbose has no short flag. --files reads stdin paths; hidden or secret-looking paths and symlink files receive no excerpt, and a file that cannot be read is named on stderr and comes out unsure (both count in excerpts withheld: N; records carry unreadable: REASON). Saves raw input, secrets included, for seven days, unless --no-save or JEVIFY_NO_SAVE=1 (JEVIFY_NO_CACHE does not stop it). Status: jevify filter: kept N of M, U unsure, full output: PATH.\nExit: 0 kept some, 1 kept none, 3 every record unsure. --json data: records[{text, ordinal, p, verdict, lossy?}], kept, total, unsure, complete, saved_input, excerpts_withheld. A skipped or failed save sets complete: false. Non-UTF-8 records have lossy: true."
     )]
     Filter {
-        statement: String,
+        /// What must be true of a kept record; unquoted words are joined
+        #[arg(required = true, num_args = 1.., value_name = "STATEMENT")]
+        statement: Vec<String>,
         #[arg(short = 'v')]
         invert: bool,
         #[arg(short = 'c')]
@@ -164,7 +173,7 @@ pub enum Cmd {
         after_help = "Examples:\n  jevify is \"the customer asks for a refund\" < mail.txt && ./refund\n  jevify is 'asks for a refund' 'mentions an order' --context mail.txt\n\nWrite the condition so that yes means act. Each statement is judged literally. No counting, arithmetic, dates or quality judgments. Oversized input is not judged.\nOne statement prints nothing on human stdout; several print VERDICT<TAB>STATEMENT lines. Exit: 0 all yes, 1 one no, 3 otherwise. --json data: p, verdict, truncated, reason (when oversized); several: statements[{statement, verdict, p}], verdict, truncated."
     )]
     Is {
-        /// A statement that must be true of the text, e.g. "the customer asks for a refund"
+        /// A statement that must be true of the text, e.g. "the customer asks for a refund"; quote each of several, unquoted words are one statement
         #[arg(required = true, num_args = 1..)]
         statements: Vec<String>,
         /// Read the context from a file instead of stdin
@@ -179,8 +188,9 @@ pub enum Cmd {
         after_help = "Examples:\n  jevify add --dry-run \"the token expiry fix\"\n  jevify add --yes \"the token expiry fix\" && git commit\n\nStages single hunks of tracked files, so it can split the changes of one file. Index only, never commits. Rejects hunks above 3000 characters and batches above the backend evidence budget before API requests or staging; no hunk evidence is clipped.\nExit: 0 staged (or scored with --dry-run), 3 no change is about the topic, 6 empty or oversized input, 130 declined. --json data: hunks[{file, header, p, staged}]."
     )]
     Add {
-        /// The topic of the changes to stage, e.g. "the token expiry fix"
-        topic: String,
+        /// The topic of the changes to stage, e.g. "the token expiry fix"; unquoted words are joined
+        #[arg(required = true, num_args = 1.., value_name = "TOPIC")]
+        topic: Vec<String>,
         /// Stage without asking
         #[arg(short, long)]
         yes: bool,
@@ -193,7 +203,7 @@ pub enum Cmd {
         after_help = "Examples:\n  jevify sort ~/Downloads\n  jevify sort ~/Downloads --apply\n  jevify sort ~/Downloads --undo <log>\n\nDestinations are the folders that already exist. Never overwrites, never deletes, same volume only.\nExit: 0 moves proposed (or applied), 3 nothing can be placed, 6 no folders to sort into. --json data: moves[{from, to, p}], skipped[{file, reason}], undo_log, applied."
     )]
     Sort {
-        /// Directory whose files (not recursive, not hidden) are sorted
+        /// Directory whose files (not recursive, not hidden) are sorted, or one file to sort alone
         dir: std::path::PathBuf,
         /// Root whose sub-folders (depth <= 2) are the destinations (default: <DIR>)
         #[allow(rustdoc::invalid_html_tags)]
@@ -214,6 +224,33 @@ pub enum Cmd {
     Health,
     /// Print shell integration (`,` alias for `jevify route`) or an agent instruction block
     Init { shell: Shell },
+}
+
+/// A free-text argument as the caller wrote it, quoted as one word or left as several: the
+/// words are joined with single spaces. A leading lone `-` is dropped, since stdin is already
+/// the default source. `None` when nothing is left to describe.
+pub fn words(words: &[String]) -> Option<String> {
+    let skip = usize::from(words.first().is_some_and(|w| w == "-"));
+    let text = words[skip..]
+        .iter()
+        .map(|w| w.trim())
+        .filter(|w| !w.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+    (!text.is_empty()).then_some(text)
+}
+
+/// The statements of `is`: each argument is one statement, as documented, and a leading lone
+/// `-` is dropped, as in [`words`]. The second value is set when every one of several
+/// statements is a single word, which reads like one sentence left unquoted: the caller is told
+/// so on stderr, and the statements stay separate.
+pub fn statements(args: &[String]) -> (Vec<String>, bool) {
+    let args = match args {
+        [dash, rest @ ..] if dash == "-" && !rest.is_empty() => rest,
+        _ => args,
+    };
+    let unquoted = args.len() > 2 && !args.iter().any(|a| a.contains(char::is_whitespace));
+    (args.to_vec(), unquoted)
 }
 
 /// The labels of `label`, validated once by the parser: at least two, distinct, none empty,
@@ -301,13 +338,13 @@ mod tests {
         ]);
         assert!(cli.g.verbose);
         assert!(
-            matches!(cli.cmd, Cmd::Filter { statement, invert: true, count: true, strict: true, nul: true, para: false, files: true, no_save: true } if statement == "-statement")
+            matches!(cli.cmd, Cmd::Filter { statement, invert: true, count: true, strict: true, nul: true, para: false, files: true, no_save: true } if statement == ["-statement"])
         );
         assert!(
             matches!(parse_without_env(&["jevify", "is", "a", "b", "--context", "FILE"]).cmd, Cmd::Is { statements, context: Some(path), .. } if statements == ["a", "b"] && path == std::path::Path::new("FILE"))
         );
         assert!(
-            matches!(parse_without_env(&["jevify", "pick", "--files", "--para", "--", "-query"]).cmd, Cmd::Pick { intent, files: true, para: true, .. } if intent == "-query")
+            matches!(parse_without_env(&["jevify", "pick", "--files", "--para", "--", "-query"]).cmd, Cmd::Pick { intent, files: true, para: true, .. } if intent == ["-query"])
         );
         assert!(matches!(
             parse_without_env(&["jevify", "why", "--no-save", "-C", "2", "-n", "3"]).cmd,
@@ -337,7 +374,6 @@ mod tests {
             vec!["jevify", "why", "-0"],
             vec!["jevify", "why", "--para"],
             vec!["jevify", "why", "--files"],
-            vec!["jevify", "pick", "--files", "DIR", "q"],
             vec!["jevify", "pick", "--files", "--index", "q"],
             vec!["jevify", "label", "-0", "--para", "a,b"],
             vec!["jevify", "label", "bug"],
@@ -353,6 +389,58 @@ mod tests {
                 .unwrap_err();
             assert_eq!(error.exit_code(), 2, "{args:?}");
         }
+    }
+
+    #[test]
+    fn free_text_is_the_words_joined_and_a_leading_dash_is_stdin() {
+        let s = |a: &[&str]| a.iter().map(|x| (*x).to_owned()).collect::<Vec<_>>();
+        assert_eq!(words(&s(&["the", "borrow"])).unwrap(), "the borrow");
+        assert_eq!(words(&s(&["the borrow"])).unwrap(), "the borrow");
+        assert_eq!(words(&s(&["-", "the", " borrow "])).unwrap(), "the borrow");
+        assert_eq!(words(&s(&["one"])).unwrap(), "one");
+        // `-` after the first word is a word; `-` alone, blanks and nothing describe nothing.
+        assert_eq!(words(&s(&["a", "-", "b"])).unwrap(), "a - b");
+        assert_eq!(words(&s(&["-"])), None);
+        assert_eq!(words(&s(&["", "  "])), None);
+        assert_eq!(words(&[]), None);
+        let long = "x ".repeat(10_000);
+        assert_eq!(words(&s(&[&long])).unwrap().len(), long.trim().len());
+        // is: every argument is a statement; three or more one-word ones are flagged.
+        let (four, unquoted) = statements(&s(&["asks", "for", "a", "refund"]));
+        assert_eq!((four.len(), unquoted), (4, true));
+        assert_eq!(
+            statements(&s(&["asks for a refund", "mentions an order"])),
+            (s(&["asks for a refund", "mentions an order"]), false)
+        );
+        assert_eq!(statements(&s(&["refund"])), (s(&["refund"]), false));
+        assert_eq!(
+            statements(&s(&["first", "second"])),
+            (s(&["first", "second"]), false)
+        );
+        assert_eq!(
+            statements(&s(&["-", "asks for a refund"])),
+            (s(&["asks for a refund"]), false)
+        );
+        assert_eq!(statements(&s(&["-"])), (s(&["-"]), false));
+    }
+
+    #[test]
+    fn unquoted_descriptions_parse_with_flags_on_either_side() {
+        assert!(
+            matches!(parse_without_env(&["jevify", "pick", "--from", "commit", "names", "the", "borrow", "-n", "2"]).cmd, Cmd::Pick { intent, from: Some(kind), top: 2, .. } if intent == ["names", "the", "borrow"] && kind == "commit")
+        );
+        assert!(
+            matches!(parse_without_env(&["jevify", "filter", "reports", "a", "failure", "-v"]).cmd, Cmd::Filter { statement, invert: true, .. } if statement == ["reports", "a", "failure"])
+        );
+        assert!(
+            matches!(parse_without_env(&["jevify", "add", "--dry-run", "the", "token", "fix"]).cmd, Cmd::Add { topic, dry_run: true, .. } if topic == ["the", "token", "fix"])
+        );
+        assert!(
+            matches!(parse_without_env(&["jevify", "pick", "-C", "work/hyper", "--from", "commit", "x"]).cmd, Cmd::Pick { repo: Some(dir), .. } if dir == std::path::Path::new("work/hyper"))
+        );
+        assert!(
+            matches!(parse_without_env(&["jevify", "fill", "--repo", "r", "--", "git", "log"]).cmd, Cmd::Fill { repo: Some(dir), .. } if dir == std::path::Path::new("r"))
+        );
     }
 
     #[test]

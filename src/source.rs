@@ -674,8 +674,10 @@ fn run_lister_blocking(argv: &[OsString], env: &Env, cap: usize) -> Result<Vec<u
     if let Some(mut message) = failure {
         if let Some(Ok(stderr)) = &streams[1] {
             let tail = &stderr[stderr.len().saturating_sub(4096)..];
+            let tail = String::from_utf8_lossy(tail);
+            let tail = tail.trim_end();
             if !tail.is_empty() {
-                message.push_str(&format!(": {}", String::from_utf8_lossy(tail)));
+                message.push_str(&format!(": {tail}"));
             }
         }
         return Err(fail(message));

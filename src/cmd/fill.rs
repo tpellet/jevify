@@ -114,7 +114,11 @@ async fn resolve(
     }
     let args = marker::parse(cmd).map_err(|e| JevifyError::Usage(e.to_string()))?;
     let markers: Vec<_> = args.iter().flat_map(|arg| &arg.markers).collect();
-    let env = source::Env::from_process(source::LISTER_TIMEOUT);
+    let mut env = source::Env::from_process(source::LISTER_TIMEOUT);
+    // `git -C DIR ...` lists where git itself will run, not where jevify was started.
+    if let Some(dir) = git_directory(cmd) {
+        env.cwd = env.cwd.join(dir);
+    }
     // One `Kind` per marker (`None` for `one` and `flag`), resolved once, before any other I/O.
     let mut kinds = Vec::with_capacity(markers.len());
     for marker in &markers {
@@ -640,7 +644,134 @@ fn apply_ranking(state: &mut State, ranking: &Ranking, threshold: f64) {
     }
 }
 
-/// `closest: a (0.42), none (0.30), b (0.08)`: the named candidates and NONE, by probability.
+/// What a caller can change after an abstention, by its reason.
+fn abstention_hint(reason: &str) -> &'static str {
+    match reason {
+        AMBIGUOUS => "add the detail that separates the nearest candidates",
+        UNSURE_FLAG => "state the condition the flag depends on literally, or decide it yourself",
+        INSUFFICIENT_EVIDENCE => {
+            "the context is over the evidence budget: pass the part that matters with --context FILE"
+        }
+        _ => {
+            "describe what the thing itself says (its words, not your goal), or narrow the listing with a literal prefix"
+        }
+    }
+}
+
+/// A `git` command line read up to its subcommand: the directory its global options name
+/// (every `-C DIR`, each relative to the one before, as git reads them; `None` for no `-C` or
+/// one whose value holds a marker) and the subcommand. `None` for any other program.
+fn git_invocation(cmd: &[OsString]) -> Option<(Option<PathBuf>, Option<String>)> {
+    let program = Path::new(cmd.first()?);
+    if program.file_name()? != "git" {
+        return None;
+    }
+    let mut dir: Option<PathBuf> = None;
+    let mut marked = false;
+    let mut args = cmd[1..].iter();
+    let mut subcommand = None;
+    while let Some(arg) = args.next() {
+        let Some(text) = arg.to_str() else {
+            break;
+        };
+        match text {
+            "-C" => {
+                let Some(value) = args.next() else {
+                    break;
+                };
+                marked |= value.to_string_lossy().contains("@{");
+                dir = Some(match dir {
+                    Some(base) => base.join(value),
+                    None => PathBuf::from(value),
+                });
+            }
+            "-c" | "--git-dir" | "--work-tree" | "--namespace" | "--config-env" => {
+                args.next();
+            }
+            _ if text.starts_with('-') => {}
+            _ => {
+                subcommand = Some(text.to_owned());
+                break;
+            }
+        }
+    }
+    Some((dir.filter(|_| !marked), subcommand))
+}
+
+/// The directory a `git` command runs in when its global options name one.
+fn git_directory(cmd: &[OsString]) -> Option<PathBuf> {
+    git_invocation(cmd)?.0
+}
+
+/// Git subcommands that read a revision and change nothing: the ones for which a remote-only
+/// branch must be spelled as its remote ref. `switch`, `checkout`, `push` and `branch` take the
+/// short name (hunch-x4w), so they are not here.
+const REVISION_READERS: [&str; 16] = [
+    "log",
+    "show",
+    "diff",
+    "rev-parse",
+    "rev-list",
+    "blame",
+    "shortlog",
+    "describe",
+    "merge-base",
+    "ls-tree",
+    "cat-file",
+    "name-rev",
+    "range-diff",
+    "format-patch",
+    "whatchanged",
+    "cherry",
+];
+
+/// Whether `name` resolves to a commit in `dir`.
+fn resolves(dir: &Path, name: &OsStr) -> bool {
+    let mut revision = name.to_os_string();
+    revision.push("^{commit}");
+    std::process::Command::new("git")
+        .current_dir(dir)
+        .args(["rev-parse", "--verify", "--quiet", "--end-of-options"])
+        .arg(revision)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success())
+}
+
+/// A bare `@{branch:...}` substitutes the short name, which only `git switch`'s DWIM resolves
+/// for a branch that exists only on a remote. For a git subcommand that reads a revision, the
+/// short name is a revision git cannot find, so the remote ref the listing showed replaces it
+/// when the short name does not resolve and the remote ref does.
+fn remote_spelling(
+    cmd: &[OsString],
+    marker: &Marker,
+    state: &State,
+    cwd: &Path,
+) -> Option<OsString> {
+    if marker.kind != "branch" || !marker.prefix.is_empty() {
+        return None;
+    }
+    let (dir, subcommand) = git_invocation(cmd)?;
+    if !REVISION_READERS.contains(&subcommand?.as_str()) {
+        return None;
+    }
+    let handle = state.handle.as_ref()?;
+    let shown = state
+        .records
+        .iter()
+        .find(|r| &r.handle == handle)?
+        .evidence
+        .split(" — ")
+        .next()?;
+    let shown = OsString::from(shown);
+    let dir = cwd.join(dir.unwrap_or_default());
+    (&shown != handle && !resolves(&dir, handle) && resolves(&dir, &shown)).then_some(shown)
+}
+
+/// `nearest (not chosen): a (0.42), none (0.30), b (0.08)`: the named candidates and NONE, by
+/// probability, labelled so that no caller takes one for the answer.
 fn closest_line(
     state: &State,
     candidates: &[&tournament::Candidate],
@@ -660,7 +791,7 @@ fn closest_line(
     }
     entries.sort_by(|a, b| b.1.total_cmp(&a.1));
     format!(
-        "closest: {}",
+        "nearest (not chosen): {}",
         entries
             .iter()
             .map(|(name, p)| format!("{name} ({p:.2})"))
@@ -674,11 +805,28 @@ fn finish(
     flags: &FillFlags,
     args: &[marker::Arg],
     markers: &[&Marker],
-    states: Vec<State>,
+    mut states: Vec<State>,
     stdin_null: bool,
     machine: bool,
 ) -> Result<Outcome, JevifyError> {
     let reason = states.iter().find_map(|s| s.reason);
+    if reason.is_none() {
+        let cmd: Vec<OsString> = args.iter().map(|a| a.literal.clone()).collect();
+        let cwd = std::env::current_dir().unwrap_or_default();
+        for (m, state) in markers.iter().zip(states.iter_mut()) {
+            let short = state.handle.clone().unwrap_or_default();
+            if let Some(remote) = remote_spelling(&cmd, m, state, &cwd) {
+                if !flags.quiet {
+                    eprintln!(
+                        "jevify fill: branch {} exists only as {}, the spelling a revision needs",
+                        output::status_escape(&short.to_string_lossy()),
+                        output::status_escape(&remote.to_string_lossy())
+                    );
+                }
+                state.handle = Some(remote);
+            }
+        }
+    }
     let model = ctx.meta().model.unwrap_or_else(|| "not requested".into());
     for (m, state) in markers.iter().zip(&states) {
         if state.reason.is_none() && !flags.quiet {
@@ -697,8 +845,13 @@ fn finish(
             } else {
                 format!("{}; ", output::status_escape(&state.detail))
             };
+            let hint = if flags.quiet {
+                String::new()
+            } else {
+                format!("; hint: {}", abstention_hint(reason))
+            };
             eprintln!(
-                "jevify fill: not run: arg {} {}: {reason}; {detail}candidates {} of {}, omitted {}; model {}",
+                "jevify fill: not run: arg {} {}: {reason}; {detail}candidates {} of {}, omitted {}; model {}{hint}",
                 m.argv_index + 1,
                 m.kind,
                 state.records.len(),
@@ -871,6 +1024,40 @@ fn edit_distance(a: &str, b: &str) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn git_directory_follows_every_dash_c_before_the_subcommand() {
+        let argv = |a: &[&str]| a.iter().map(OsString::from).collect::<Vec<_>>();
+        let dir = |a: &[&str]| git_directory(&argv(a));
+        assert_eq!(
+            dir(&["git", "-C", "work/hyper", "show", "@{commit:x}"]),
+            Some(PathBuf::from("work/hyper"))
+        );
+        assert_eq!(
+            dir(&[
+                "/usr/bin/git",
+                "-C",
+                "/abs",
+                "-c",
+                "a=b",
+                "-C",
+                "sub",
+                "log"
+            ]),
+            Some(PathBuf::from("/abs/sub"))
+        );
+        assert_eq!(
+            dir(&["git", "--no-pager", "-C", "r", "log"]),
+            Some(PathBuf::from("r"))
+        );
+        // After the subcommand, -C belongs to it (git log has none, but grep -C is context).
+        assert_eq!(dir(&["git", "grep", "-C", "3", "x"]), None);
+        assert_eq!(dir(&["git", "show", "@{commit:x}"]), None);
+        assert_eq!(dir(&["gitx", "-C", "r", "show"]), None);
+        assert_eq!(dir(&["git", "-C", "@{dir:the repo}", "show"]), None);
+        assert_eq!(dir(&["git", "-C"]), None);
+        assert_eq!(dir(&[]), None);
+    }
 
     #[test]
     fn terminal_requires_explicit_input() {

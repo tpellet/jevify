@@ -1,5 +1,6 @@
 #![deny(unsafe_code)]
 
+pub mod argv;
 pub mod cli;
 pub mod cmd;
 pub mod config;
@@ -61,12 +62,13 @@ More: jevify <verb> --help | agents: jevify capabilities --json, jevify robot-do
 );
 
 pub fn main_exit() -> i32 {
-    let args: Vec<OsString> = std::env::args_os().skip(1).collect();
     // Bare `jevify` stays a usage error (exit 2, stderr), as it was with clap's full help.
     if std::env::args_os().len() == 1 {
         eprint!("{QUICK_START}");
         return Exit::Usage.code();
     }
+    // A verb option written before the verb moves after it, where clap reads it.
+    let args = argv::reorder(&std::env::args_os().skip(1).collect::<Vec<_>>());
     let name = raw_command(&args);
     let removed = if name == "run" {
         Some(("jevify", "use jevify route 'x'"))
@@ -87,19 +89,16 @@ pub fn main_exit() -> i32 {
         eprintln!("jevify: {message}");
         return Exit::Usage.code();
     }
-    let cli = match Cli::try_parse() {
+    let program = std::env::args_os()
+        .next()
+        .unwrap_or_else(|| OsString::from("jevify"));
+    let cli = match Cli::try_parse_from(std::iter::once(program).chain(args.iter().cloned())) {
         Ok(c) => c,
         Err(e) => {
             // A usage error under --json must still be exactly one envelope, not clap's text.
             if e.use_stderr() {
+                let message = clap_message(&e);
                 if name == "fill" {
-                    let message = e
-                        .to_string()
-                        .lines()
-                        .next()
-                        .unwrap_or("usage error")
-                        .trim_start_matches("error: ")
-                        .to_owned();
                     return report_fill_error(
                         machine_format(&args).unwrap_or(Format::Human),
                         &JevifyError::Kinded {
@@ -113,20 +112,14 @@ pub fn main_exit() -> i32 {
                         raw_quiet(&args),
                     );
                 }
-                if VERBS.contains(&name) || machine_format(&args).is_some() {
+                let unknown_verb = e.kind() == clap::error::ErrorKind::InvalidSubcommand;
+                if VERBS.contains(&name) || machine_format(&args).is_some() || unknown_verb {
                     let format = machine_format(&args).unwrap_or(Format::Human);
                     let name = if VERBS.contains(&name) {
                         name
                     } else {
                         "jevify"
                     };
-                    let message = e
-                        .to_string()
-                        .lines()
-                        .next()
-                        .unwrap_or("usage error")
-                        .trim_start_matches("error: ")
-                        .to_string();
                     return report_error(
                         format,
                         name,
@@ -154,6 +147,22 @@ pub fn main_exit() -> i32 {
         .build()
         .expect("tokio runtime");
     rt.block_on(run_cli(cli))
+}
+
+/// Clap's error as one line: its first line, with the missing arguments it lists after a colon.
+fn clap_message(e: &clap::Error) -> String {
+    let text = e.to_string();
+    let mut lines = text.lines().map(str::trim).filter(|l| !l.is_empty());
+    let first = lines
+        .next()
+        .unwrap_or("usage error")
+        .trim_start_matches("error: ");
+    if first.ends_with(':') {
+        let listed: Vec<&str> = lines.take_while(|l| !l.starts_with("Usage:")).collect();
+        format!("{first} {}", listed.join(", "))
+    } else {
+        first.to_owned()
+    }
 }
 
 /// Clap failed before a `Cli` existed, so the requested machine format is read from the raw args.
@@ -233,6 +242,21 @@ async fn run_cli(cli: Cli) -> i32 {
             report_error(format, name, e, meta)
         }
     };
+    // -C DIR: everything that follows runs as if jevify had been started in DIR.
+    if let Cmd::Fill {
+        repo: Some(dir), ..
+    }
+    | Cmd::Pick {
+        repo: Some(dir), ..
+    } = &cli.cmd
+    {
+        if let Err(e) = std::env::set_current_dir(dir) {
+            return report(
+                &JevifyError::Input(format!("-C {}: {e}", dir.display())),
+                Meta::default(),
+            );
+        }
+    }
     let ctx = match config::Config::load(&cli.g) {
         Ok(c) => c,
         Err(e) => return report(&e, Meta::default()),
@@ -310,24 +334,41 @@ fn exec_command(exec: &cmd::Exec) -> JevifyError {
     JevifyError::cannot_run(format!("{}: {error}", exec.argv[0].to_string_lossy()))
 }
 
-fn fill_error_text(e: &JevifyError, quiet: bool) -> String {
+/// The hint and the example of an error: built from the caller's own argv when jevify can
+/// correct it, the error's static pair otherwise.
+fn advice(e: &JevifyError) -> (String, String, bool) {
+    let args: Vec<String> = std::env::args_os()
+        .skip(1)
+        .map(|a| a.to_string_lossy().into_owned())
+        .collect();
+    let cwd = std::env::current_dir().unwrap_or_default();
+    match argv::advice(&args, e, &cwd) {
+        Some((hint, example)) => (hint, example, true),
+        None => (e.hint().to_owned(), e.example().to_owned(), false),
+    }
+}
+
+fn fill_error_text(e: &JevifyError, quiet: bool, advice: &(String, String, bool)) -> String {
     let mut text = format!(
         "jevify fill: not run: {}: {}\n",
         e.kind(),
         output::status_escape(&e.to_string())
     );
     if !quiet {
-        text.push_str(&format!(
-            "jevify fill: {}\n",
-            output::status_escape(e.hint())
-        ));
+        let (hint, example, tailored) = advice;
+        let line = if *tailored {
+            format!("{hint}; try: {example}")
+        } else {
+            hint.clone()
+        };
+        text.push_str(&format!("jevify fill: {}\n", output::status_escape(&line)));
     }
     text
 }
 
 fn report_fill_error(format: Format, e: &JevifyError, meta: Meta, quiet: bool) -> i32 {
     if format == Format::Human {
-        eprint!("{}", fill_error_text(e, quiet));
+        eprint!("{}", fill_error_text(e, quiet, &advice(e)));
         e.exit().code()
     } else {
         report_error(format, "fill", e, meta)
@@ -337,11 +378,16 @@ fn report_fill_error(format: Format, e: &JevifyError, meta: Meta, quiet: bool) -
 fn report_error(format: Format, name: &str, e: &JevifyError, mut meta: Meta) -> i32 {
     // A usage error under --json still names the verb it was decided for.
     meta.decision.verb = name.into();
+    let (hint, example, _) = advice(e);
     if format == Format::Human {
+        let prefix = if name == "jevify" {
+            "jevify".to_owned()
+        } else {
+            format!("jevify {name}")
+        };
         eprintln!(
-            "jevify {name}: error: {e}\n  hint: {}\n  try:  {}",
-            e.hint(),
-            e.example()
+            "{prefix}: error: {}\n  hint: {hint}\n  try:  {example}",
+            e.to_string().trim_end()
         );
         if let Some(id) = &meta.request_id {
             eprintln!("  request: {id}");
@@ -357,8 +403,8 @@ fn report_error(format: Format, name: &str, e: &JevifyError, mut meta: Meta) -> 
             error: Some(ErrorBody {
                 kind: e.kind(),
                 message: e.to_string(),
-                hint: e.hint(),
-                example: e.example(),
+                hint,
+                example,
             }),
         };
         if let Err(e) = writeln!(
@@ -396,6 +442,7 @@ async fn dispatch(cli: &Cli, ctx: &config::Config) -> Result<cmd::Outcome, Jevif
             nul,
             para,
             cmd,
+            repo: _,
         } => {
             cmd::fill::run(
                 ctx,
@@ -421,10 +468,11 @@ async fn dispatch(cli: &Cli, ctx: &config::Config) -> Result<cmd::Outcome, Jevif
             files,
             nul,
             para,
+            repo: _,
         } => {
             cmd::pick::run(
                 ctx,
-                intent,
+                &described(intent, "pick")?,
                 *top,
                 *index,
                 split(*nul, *para),
@@ -438,7 +486,7 @@ async fn dispatch(cli: &Cli, ctx: &config::Config) -> Result<cmd::Outcome, Jevif
             top,
             no_save,
         } => cmd::why::run(ctx, *context, *top, *no_save).await,
-        Cmd::Route { intent } => cmd::run::run(ctx, &intent.join(" "), machine).await,
+        Cmd::Route { intent } => cmd::run::run(ctx, &described(intent, "route")?, machine).await,
         Cmd::Filter {
             statement,
             invert,
@@ -451,7 +499,7 @@ async fn dispatch(cli: &Cli, ctx: &config::Config) -> Result<cmd::Outcome, Jevif
         } => {
             cmd::filter::run(
                 ctx,
-                statement,
+                &described(statement, "filter")?,
                 cmd::filter::FilterFlags {
                     invert: *invert,
                     count: *count,
@@ -485,12 +533,22 @@ async fn dispatch(cli: &Cli, ctx: &config::Config) -> Result<cmd::Outcome, Jevif
             statements,
             context,
             band,
-        } => cmd::is::run(ctx, statements, context.as_deref(), *band).await,
+        } => {
+            let (statements, unquoted) = cli::statements(statements);
+            if unquoted {
+                eprintln!(
+                    "jevify is: judging {} one-word statements separately; quote a sentence to judge it as one: jevify is '{}'",
+                    statements.len(),
+                    statements.join(" ")
+                );
+            }
+            cmd::is::run(ctx, &statements, context.as_deref(), *band).await
+        }
         Cmd::Add {
             topic,
             yes,
             dry_run,
-        } => cmd::add::run(ctx, topic, *yes, *dry_run, machine).await,
+        } => cmd::add::run(ctx, &described(topic, "add")?, *yes, *dry_run, machine).await,
         Cmd::Sort {
             dir,
             into,
@@ -502,6 +560,15 @@ async fn dispatch(cli: &Cli, ctx: &config::Config) -> Result<cmd::Outcome, Jevif
         Cmd::Health => cmd::agent::health(ctx).await,
         Cmd::Init { shell } => Ok(cmd::agent::init(*shell)),
     }
+}
+
+/// The free text of a verb, from the words the caller wrote; nothing left is a usage error.
+fn described(words: &[String], verb: &str) -> Result<String, JevifyError> {
+    cli::words(words).ok_or_else(|| {
+        JevifyError::Usage(format!(
+            "{verb} needs a description, not only `-`: stdin is already the default source"
+        ))
+    })
 }
 
 fn split(nul: bool, para: bool) -> records::Split {
@@ -544,9 +611,18 @@ mod tests {
         let error = exec_command(&exec);
         assert_eq!((error.exit().code(), error.kind()), (6, "cannot_run"));
         assert!(error.to_string().contains("Cargo.toml"));
-        assert!(fill_error_text(&error, false).starts_with("jevify fill: not run: cannot_run:"));
-        assert_eq!(fill_error_text(&error, false).lines().count(), 2);
-        assert_eq!(fill_error_text(&error, true).lines().count(), 1);
+        let fixed = ("hint".to_owned(), "jevify fill -- x".to_owned(), true);
+        let plain = (error.hint().to_owned(), error.example().to_owned(), false);
+        assert!(
+            fill_error_text(&error, false, &plain).starts_with("jevify fill: not run: cannot_run:")
+        );
+        assert_eq!(fill_error_text(&error, false, &plain).lines().count(), 2);
+        assert_eq!(fill_error_text(&error, true, &plain).lines().count(), 1);
+        // A corrected command joins the hint on the same line.
+        let text = fill_error_text(&error, false, &fixed);
+        assert_eq!(text.lines().count(), 2);
+        assert!(text.ends_with("jevify fill: hint; try: jevify fill -- x\n"));
+        assert!(!fill_error_text(&error, false, &plain).contains("try:"));
     }
     #[test]
     fn output_errors_only_succeed_for_broken_pipe() {

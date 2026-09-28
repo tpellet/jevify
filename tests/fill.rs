@@ -622,14 +622,26 @@ async fn ties_none_and_duplicate_evidence_never_execute() {
     // The status line names the rival that decided the abstention, NONE included, and a
     // no_match names the top candidates instead of an empty field.
     for (best, second, none, reason, closest) in [
-        (0.45, 0.45, 0.1, "ambiguous", "closest: a (0.45), b (0.45)"),
-        (0.5, 0.1, 0.4, "ambiguous", "closest: a (0.50), none (0.40)"),
+        (
+            0.45,
+            0.45,
+            0.1,
+            "ambiguous",
+            "nearest (not chosen): a (0.45), b (0.45)",
+        ),
+        (
+            0.5,
+            0.1,
+            0.4,
+            "ambiguous",
+            "nearest (not chosen): a (0.50), none (0.40)",
+        ),
         (
             0.2,
             0.1,
             0.7,
             "no_match",
-            "closest: none (0.70), a (0.20), b (0.10)",
+            "nearest (not chosen): none (0.70), a (0.20), b (0.10)",
         ),
     ] {
         let server = common::mock(move |request: &wiremock::Request| {
@@ -2392,4 +2404,170 @@ async fn no_variable_writes_nothing_and_an_unwritable_status_file_stops_the_run(
     let stderr = String::from_utf8_lossy(&refused.stderr);
     assert!(stderr.contains("status_file_unwritable"), "{stderr}");
     assert!(!blocked.exists());
+}
+
+/// A real git work tree at `root/rel`: two commits on the default branch, and a branch that
+/// exists only as the remote ref `origin/ticket/TPE-791`.
+fn real_repo(root: &std::path::Path, rel: &str) -> std::path::PathBuf {
+    let repo = root.join(rel);
+    std::fs::create_dir_all(&repo).unwrap();
+    let git = |args: &[&str]| {
+        let status = std::process::Command::new("git")
+            .current_dir(&repo)
+            .args(["-c", "user.name=t", "-c", "user.email=t@example.com"])
+            .args(args)
+            .stdout(std::process::Stdio::null())
+            .status()
+            .unwrap();
+        assert!(status.success(), "git {args:?}");
+    };
+    git(&["init", "-q"]);
+    std::fs::write(repo.join("a"), "a\n").unwrap();
+    git(&["add", "a"]);
+    git(&["commit", "-qm", "Add the allergy model and its migration"]);
+    git(&["update-ref", "refs/remotes/origin/ticket/TPE-791", "HEAD"]);
+    std::fs::write(repo.join("b"), "b\n").unwrap();
+    git(&["add", "b"]);
+    git(&["commit", "-qm", "Borrow in the return type of compute"]);
+    repo
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn git_dash_c_in_the_command_is_where_the_listers_run() {
+    let server = common::mock(FakeJev {
+        choose: |_, s, o| common::option_containing(s, o, "Borrow in the return type"),
+        noul: |_, _| 0.9,
+    })
+    .await;
+    let parent = tempfile::tempdir().unwrap().keep().canonicalize().unwrap();
+    real_repo(&parent, "work/hyper");
+    let marker = "@{commit:names the borrow in the return type}";
+    let fill = |args: &[&str]| {
+        let mut cmd = common::jevify(&server);
+        cmd.current_dir(&parent)
+            .env("GIT_CEILING_DIRECTORIES", &parent)
+            .args(args)
+            .write_stdin("");
+        cmd
+    };
+    for args in [
+        vec![
+            "fill",
+            "--dry-run",
+            "--",
+            "git",
+            "-C",
+            "work/hyper",
+            "show",
+            marker,
+        ],
+        vec![
+            "fill",
+            "-C",
+            "work/hyper",
+            "--dry-run",
+            "--",
+            "git",
+            "show",
+            marker,
+        ],
+    ] {
+        let mut cmd = fill(&args);
+        let out = tokio::task::spawn_blocking(move || cmd.output().unwrap())
+            .await
+            .unwrap();
+        assert_eq!(out.status.code(), Some(0), "{out:?}");
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        assert!(stdout.contains("'show' '"), "{stdout}");
+    }
+    // From the parent without -C: exit 6, and the corrected command names the repository.
+    let mut cmd = fill(&["fill", "--dry-run", "--", "git", "show", marker]);
+    let out = tokio::task::spawn_blocking(move || cmd.output().unwrap())
+        .await
+        .unwrap();
+    assert_eq!(out.status.code(), Some(6));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains(&format!(
+            "try: jevify fill -C work/hyper --dry-run -- git show '{marker}'"
+        )),
+        "{stderr}"
+    );
+    assert_eq!(stderr.lines().count(), 2, "{stderr}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_remote_only_branch_is_its_remote_ref_for_a_command_that_reads_a_revision() {
+    let server = common::mock(FakeJev {
+        choose: |_, s, o| common::option_containing(s, o, "TPE-791"),
+        noul: |_, _| 0.9,
+    })
+    .await;
+    let root = tempfile::tempdir().unwrap().keep().canonicalize().unwrap();
+    let repo = real_repo(&root, "r");
+    let marker = "@{branch:the allergy model}";
+    // (command, stdout, whether the status names the rewrite)
+    for (command, expected, rewritten) in [
+        (
+            vec!["git", "log", "-1", marker],
+            "'git' 'log' '-1' 'origin/ticket/TPE-791'\n",
+            true,
+        ),
+        (
+            vec!["git", "--no-pager", "show", marker],
+            "'git' '--no-pager' 'show' 'origin/ticket/TPE-791'\n",
+            true,
+        ),
+        // switch resolves the short name by its DWIM rule, and refuses the remote ref.
+        (
+            vec!["git", "switch", marker],
+            "'git' 'switch' 'ticket/TPE-791'\n",
+            false,
+        ),
+        // A literal prefix already says which spelling the caller wants.
+        (
+            vec!["git", "log", "origin/@{branch:the allergy model}"],
+            "'git' 'log' 'origin/ticket/TPE-791'\n",
+            false,
+        ),
+    ] {
+        let mut cmd = common::jevify(&server);
+        cmd.current_dir(&repo)
+            .args(["fill", "--dry-run", "--"])
+            .args(&command)
+            .write_stdin("");
+        let out = tokio::task::spawn_blocking(move || cmd.output().unwrap())
+            .await
+            .unwrap();
+        assert_eq!(out.status.code(), Some(0), "{command:?} {out:?}");
+        assert_eq!(
+            String::from_utf8_lossy(&out.stdout),
+            expected,
+            "{command:?}"
+        );
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert_eq!(
+            stderr.contains("exists only as origin/ticket/TPE-791"),
+            rewritten,
+            "{command:?} {stderr}"
+        );
+    }
+    // Run for real: git resolves the remote ref, and the command exits 0.
+    let mut cmd = common::jevify(&server);
+    cmd.current_dir(&repo)
+        .args(["fill", "--", "git", "log", "-1", "--oneline", marker])
+        .write_stdin("");
+    let out = tokio::task::spawn_blocking(move || cmd.output().unwrap())
+        .await
+        .unwrap();
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
+    assert!(
+        String::from_utf8_lossy(&out.stdout).contains("Add the allergy model"),
+        "{out:?}"
+    );
+    assert!(
+        String::from_utf8_lossy(&out.stderr)
+            .contains("exec 'git' 'log' '-1' '--oneline' 'origin/ticket/TPE-791'"),
+        "{out:?}"
+    );
 }

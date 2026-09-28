@@ -372,6 +372,11 @@ pub async fn run(
     let dir = dir
         .canonicalize()
         .map_err(|e| JevifyError::Input(e.to_string()))?;
+    // A file is sorted alone, among the folders beside it (or under --into).
+    let (dir, only) = match dir.parent() {
+        Some(parent) if dir.is_file() => (parent.to_path_buf(), Some(dir.clone())),
+        _ => (dir, None),
+    };
     let root = into
         .unwrap_or(&dir)
         .canonicalize()
@@ -407,6 +412,9 @@ pub async fn run(
                     .is_some_and(|n| n.to_string_lossy().starts_with('.'))
         })
         .collect();
+    if let Some(file) = &only {
+        files.retain(|p| p == file);
+    }
     // Canonical order: `read_dir` is filesystem order, and option order moves an uncertain
     // probability (up to 0.23 measured); sorted, the batches and the cache key are stable.
     files.sort();

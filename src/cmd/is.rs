@@ -25,8 +25,15 @@ pub async fn run(
         let path = path.to_owned();
         tokio::task::spawn_blocking(move || {
             use std::io::Read;
-            let file = std::fs::File::open(&path)
-                .map_err(|e| JevifyError::Input(format!("{}: {e}", path.display())))?;
+            if path.as_os_str().to_string_lossy().contains('\n') {
+                return Err(JevifyError::Input(
+                    "--context takes a file path, not the text: pipe the text on stdin instead"
+                        .into(),
+                ));
+            }
+            let file = std::fs::File::open(&path).map_err(|e| {
+                JevifyError::Input(format!("{}: {e}{}", path.display(), near_paths(&path)))
+            })?;
             let mut bytes = Vec::new();
             file.take(crate::input::MAX_BYTES as u64 + 1)
                 .read_to_end(&mut bytes)
@@ -89,6 +96,13 @@ pub async fn run(
         let p = answer.noul("is")?;
         ctx.stats.gate(crate::output::Gate::noul(p));
         let (exit, verdict) = band_verdict(p, ctx.threshold, band);
+        if exit == Exit::Abstain {
+            eprintln!(
+                "jevify is: unsure (p {p:.2}, between {:.2} and {:.2}); hint: state one fact the text would say literally, or split the statement into several quoted ones",
+                (ctx.threshold - band).max(0.0),
+                (ctx.threshold + band).min(1.0)
+            );
+        }
         return Ok(Outcome {
             exit,
             data: serde_json::json!({ "p": p, "verdict": verdict, "truncated": truncated }),
@@ -119,6 +133,37 @@ pub async fn run(
     })
 }
 
+/// `; nearby: a, b` naming up to three entries of the missing path's directory whose names are
+/// closest to its own (within half its length), or nothing when none is close.
+fn near_paths(path: &std::path::Path) -> String {
+    let Some(name) = path.file_name().map(|n| n.to_string_lossy().into_owned()) else {
+        return String::new();
+    };
+    let dir = match path.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => parent.to_path_buf(),
+        _ => std::path::PathBuf::from("."),
+    };
+    let Ok(entries) = std::fs::read_dir(&dir) else {
+        return String::new();
+    };
+    let mut near: Vec<(usize, String)> = entries
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .map(|entry| (crate::cmd::pick::distance(&name, &entry), entry))
+        .filter(|(d, _)| *d <= name.chars().count().div_ceil(2))
+        .collect();
+    near.sort();
+    near.truncate(3);
+    if near.is_empty() {
+        return String::new();
+    }
+    let shown: Vec<String> = near
+        .into_iter()
+        .map(|(_, entry)| dir.join(entry).display().to_string())
+        .collect();
+    format!("; nearby: {}", shown.join(", "))
+}
+
 /// yes at or above `threshold + band`, no below `threshold - band`, unsure in between.
 pub fn band_verdict(p: f64, threshold: f64, band: f64) -> (Exit, &'static str) {
     if p >= (threshold + band).min(1.0) {
@@ -133,6 +178,24 @@ pub fn band_verdict(p: f64, threshold: f64, band: f64) -> (Exit, &'static str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_missing_context_names_the_nearest_entries() {
+        let dir = tempfile::tempdir().unwrap();
+        for name in ["mail.txt", "mails.txt", "notes.md"] {
+            std::fs::write(dir.path().join(name), "x").unwrap();
+        }
+        let near = near_paths(&dir.path().join("mail.tx"));
+        assert!(near.starts_with("; nearby: "), "{near}");
+        assert!(
+            near.contains("mail.txt") && near.contains("mails.txt"),
+            "{near}"
+        );
+        assert!(!near.contains("notes.md"), "{near}");
+        assert_eq!(near_paths(&dir.path().join("zzzzzzzzzz")), "");
+        assert_eq!(near_paths(&dir.path().join("missing/mail.txt")), "");
+        assert_eq!(near_paths(std::path::Path::new("/")), "");
+    }
     #[test]
     fn verdict_bands_around_the_threshold() {
         let cases = [

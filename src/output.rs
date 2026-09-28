@@ -232,8 +232,10 @@ pub struct Meta {
 pub struct ErrorBody {
     pub kind: &'static str,
     pub message: String,
-    pub hint: &'static str,
-    pub example: &'static str,
+    /// The next move, built from the caller's argv when jevify can correct it.
+    pub hint: String,
+    /// A runnable command, the caller's own corrected when jevify can.
+    pub example: String,
 }
 
 #[derive(Serialize, Debug)]

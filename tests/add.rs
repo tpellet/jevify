@@ -184,6 +184,11 @@ async fn machine_mode_without_yes_is_declined() {
     .await
     .unwrap();
     assert_eq!(out.status.code(), Some(130));
+    // Declined before any classification, with the caller's command corrected.
+    assert!(server.received_requests().await.unwrap().is_empty());
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v["error"]["kind"], "declined");
+    assert_eq!(v["error"]["example"], "jevify --json add --yes anything");
 }
 
 // From a subdirectory, hunks in files outside it must still be staged (git runs at the top level;

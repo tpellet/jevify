@@ -72,6 +72,24 @@ pub async fn run(
             "hunk exceeds the {HUNK_CHARS}-character evidence budget; no hunks were classified or staged"
         )));
     }
+    // Staging needs a yes: --yes, or a terminal to ask on. Without either, stop before any
+    // request, so an unattended caller learns the fix without paying for a classification.
+    let terminal = || {
+        std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open("/dev/tty")
+            .is_ok()
+    };
+    if !yes && !dry_run && (machine || !terminal()) {
+        return Err(JevifyError::Kinded {
+            kind: "declined",
+            exit: Exit::Interrupted,
+            message: "add stages only with --yes, or after a yes on a terminal, and there is none; nothing was classified or staged".into(),
+            hint: "pass --yes to stage, or --dry-run to score the hunks",
+            example: "jevify add --dry-run \"the token expiry fix\"",
+        });
+    }
     let client = Client::new(ctx)?;
     let file_name = |fi: usize| {
         files[fi]
@@ -127,6 +145,27 @@ pub async fn run(
         .collect();
     let n = chosen.iter().filter(|c| **c).count();
     if n == 0 {
+        let mut ranked: Vec<(String, f64)> = flat
+            .iter()
+            .zip(&ps)
+            .map(|((fi, hi, _), p)| {
+                (
+                    format!("{} {}", file_name(*fi), files[*fi].hunks[*hi].header.trim()),
+                    *p,
+                )
+            })
+            .collect();
+        ranked.sort_by(|a, b| b.1.total_cmp(&a.1));
+        ranked.truncate(3);
+        eprintln!(
+            "{}",
+            super::abstain_line(
+                "add",
+                "no hunk is about the topic",
+                &ranked,
+                "name what the change does in the code (a function, a behaviour), and check the hunks with --dry-run"
+            )
+        );
         return Ok(Outcome {
             exit: Exit::Abstain,
             data: serde_json::json!({ "hunks": rows }),

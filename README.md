@@ -268,7 +268,9 @@ command. The [skill](plugins/jevify/skills/jevify/SKILL.md) teaches the same to 
 skill directory into `~/.agents/skills/`). Every command takes `--json` and answers with one
 envelope, `{ok, command, version, exit_code, data, meta, error}`. `jevify capabilities --json`
 lists every command, flag, kind and limit, and `jevify robot-docs guide` prints the handbook as
-text. Allow `jevify fill --dry-run` freely. Allow `fill` per command prefix,
+text. A description may be quoted or left as bare words, `-C DIR` runs `fill` or `pick` in
+another directory, and every error ends with `try:` and the caller's own command, corrected.
+Allow `jevify fill --dry-run` freely. Allow `fill` per command prefix,
 `jevify fill -- git switch:*`, exactly as you allow the command itself.
 
 ## Reference

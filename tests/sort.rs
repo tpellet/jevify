@@ -33,6 +33,45 @@ async fn sort_with_folder_count(classifier: bool, folders: usize) -> serde_json:
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn a_file_is_sorted_alone_among_the_folders_beside_it() {
+    let server = common::mock(FakeJev {
+        choose: |_, _, options| {
+            options
+                .iter()
+                .find(|o| o.as_str() != "NONE")
+                .unwrap()
+                .clone()
+        },
+        noul: |_, _| 0.9,
+    })
+    .await;
+    let d = tempfile::tempdir().unwrap();
+    std::fs::create_dir(d.path().join("invoices")).unwrap();
+    std::fs::write(d.path().join("bill.txt"), "invoice 42").unwrap();
+    std::fs::write(d.path().join("other.txt"), "a letter").unwrap();
+    let file = d.path().join("bill.txt");
+    let mut command = common::jevify(&server);
+    let out = tokio::task::spawn_blocking(move || {
+        command
+            .args(["--json", "sort", file.to_str().unwrap()])
+            .output()
+            .unwrap()
+    })
+    .await
+    .unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v["exit_code"], 0, "{v}");
+    let moves = v["data"]["moves"].as_array().unwrap();
+    assert_eq!(moves.len(), 1, "{v}");
+    assert!(
+        moves[0]["from"].as_str().unwrap().ends_with("bill.txt"),
+        "{v}"
+    );
+    // A dry run: nothing moved, and the other file was not considered.
+    assert!(d.path().join("bill.txt").exists() && d.path().join("other.txt").exists());
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn destination_capacity_is_backend_aware_without_dropping_folders() {
     for folders in [99, 100, 200] {
         let v = sort_with_folder_count(false, folders).await;

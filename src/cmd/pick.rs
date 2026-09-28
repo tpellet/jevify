@@ -21,7 +21,8 @@ pub async fn run(
     files: bool,
     from: Option<&str>,
 ) -> Result<Outcome, JevifyError> {
-    if let Some(kind) = from {
+    // `--from -` names the default source, stdin.
+    if let Some(kind) = from.filter(|kind| *kind != "-") {
         return from_kind(ctx, intent, top, kind).await;
     }
     if top == 0 {
@@ -33,9 +34,20 @@ pub async fn run(
         ));
     }
     let client = Client::new(ctx)?;
-    let bytes = tokio::task::spawn_blocking(crate::input::read_stdin_bytes)
+    let read = tokio::task::spawn_blocking(crate::input::read_stdin_bytes)
         .await
-        .map_err(|e| JevifyError::Input(e.to_string()))??;
+        .map_err(|e| JevifyError::Input(e.to_string()))?;
+    // `--files` with nothing on stdin (a terminal, or an upstream command that printed nothing)
+    // ranks the files of the working directory: what `git ls-files | jevify pick --files` does.
+    let (bytes, split) = match read {
+        Ok(bytes) if files && bytes.iter().all(u8::is_ascii_whitespace) => {
+            (working_directory_files().await?, Split::Lines)
+        }
+        Err(JevifyError::EmptyInput(_)) if files => {
+            (working_directory_files().await?, Split::Lines)
+        }
+        other => (other?, split),
+    };
     let records = records::parse(&bytes, split)?;
     if records.is_empty() {
         return Err(JevifyError::EmptyInput("stdin was empty"));
@@ -203,13 +215,26 @@ pub async fn run(
             human.extend_from_slice(&bytes[record.raw.clone()]);
         }
     }
+    let mut data = serde_json::json!({ "matches": matches, "any": ranking.any, "source": if files { "files" } else { "stdin" } });
+    if matches.is_empty() {
+        let closest = super::closest(&ranking, |i| {
+            records[kept[i]].handle.to_string_lossy().into_owned()
+        });
+        let hint = super::abstain_hint(&ranking, ctx.threshold, super::DESCRIBE_THE_RECORD);
+        eprintln!(
+            "{}",
+            super::abstain_line("pick", crate::exit::NO_MATCH, &closest, &hint)
+        );
+        data["closest"] = closest_json(&closest);
+        data["hint"] = hint.into();
+    }
     Ok(Outcome {
         exit: if matches.is_empty() {
             Exit::Abstain
         } else {
             Exit::Ok
         },
-        data: serde_json::json!({ "matches": matches, "any": ranking.any, "source": if files { "files" } else { "stdin" } }),
+        data,
         human,
         exec: None,
     })
@@ -245,11 +270,6 @@ async fn from_kind(
             kinds.join(", ")
         )));
     };
-    if name == "-" {
-        return Err(JevifyError::Usage(
-            "stdin is the default source; omit --from -".into(),
-        ));
-    }
     if top == 0 {
         return Err(JevifyError::Usage("-n must be at least 1".into()));
     }
@@ -345,14 +365,15 @@ async fn from_kind(
     };
     let mut matches = Vec::new();
     let mut human = Vec::new();
+    let mut closest = vec![];
+    let mut hint = None;
     if let Some(reason) = reason {
-        let closest: Vec<_> = ranking
-            .candidates
-            .iter()
-            .take(2)
-            .map(|c| listing.records[c.index].handle.to_string_lossy())
-            .collect();
-        eprintln!("jevify pick: {reason}; closest: {}", closest.join(", "));
+        closest = super::closest(&ranking, |i| {
+            listing.records[i].handle.to_string_lossy().into_owned()
+        });
+        let text = super::abstain_hint(&ranking, ctx.threshold, super::DESCRIBE_THE_RECORD);
+        eprintln!("{}", super::abstain_line("pick", reason, &closest, &text));
+        hint = Some(text);
     } else {
         for candidate in ranking
             .candidates
@@ -366,19 +387,55 @@ async fn from_kind(
             matches.push(serde_json::json!({"text": handle.to_string_lossy(), "lossy": handle.to_str().is_none(), "ordinal": candidate.index + 1, "p": candidate.p}));
         }
     }
+    let mut data = serde_json::json!({"matches": matches, "reason": reason, "any": ranking.any, "source": name, "candidates": count, "total": listing.total, "omitted": listing.omitted, "windows": windows, "finalists_per_window": n});
+    if let Some(hint) = hint {
+        data["closest"] = closest_json(&closest);
+        data["hint"] = hint.into();
+    }
     Ok(Outcome {
         exit: if reason.is_some() {
             Exit::Abstain
         } else {
             Exit::Ok
         },
-        data: serde_json::json!({"matches": matches, "reason": reason, "any": ranking.any, "source": name, "candidates": count, "total": listing.total, "omitted": listing.omitted, "windows": windows, "finalists_per_window": n}),
+        data,
         human,
         exec: None,
     })
 }
 
-fn distance(a: &str, b: &str) -> usize {
+/// `data.closest` of an abstention: `[{text, p}]`, best first.
+fn closest_json(closest: &[(String, f64)]) -> serde_json::Value {
+    closest
+        .iter()
+        .map(|(text, p)| serde_json::json!({ "text": text, "p": p }))
+        .collect()
+}
+
+/// The paths of the `file` kind under the current directory, one per line: tracked and
+/// untracked files of a work tree with ignored ones excluded, or a no-follow walk outside one.
+/// A path holding a newline is left out by the listing. Stated on stderr in one line.
+async fn working_directory_files() -> Result<Vec<u8>, JevifyError> {
+    let env = source::Env::from_process(source::LISTER_TIMEOUT);
+    let listing = source::enumerate("file", Scope::Prefix(None), MAX_LINES + 1, &env).await?;
+    if listing.records.is_empty() {
+        return Err(JevifyError::EmptyInput(
+            "no paths on stdin and no files under the current directory",
+        ));
+    }
+    eprintln!(
+        "jevify pick: no paths on stdin; ranking the {} files under the current directory (git ls-files, or a walk outside a work tree)",
+        listing.records.len()
+    );
+    let mut bytes = Vec::new();
+    for record in &listing.records {
+        bytes.extend_from_slice(record.handle.as_bytes());
+        bytes.push(b'\n');
+    }
+    Ok(bytes)
+}
+
+pub(crate) fn distance(a: &str, b: &str) -> usize {
     let mut row: Vec<_> = (0..=b.chars().count()).collect();
     for (i, left) in a.chars().enumerate() {
         let mut diagonal = row[0];

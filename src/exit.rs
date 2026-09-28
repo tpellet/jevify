@@ -285,8 +285,8 @@ mod tests {
                 error: Some(ErrorBody {
                     kind: error.kind(),
                     message: error.to_string(),
-                    hint: error.hint(),
-                    example: error.example(),
+                    hint: error.hint().into(),
+                    example: error.example().into(),
                 }),
             };
             let value = serde_json::to_value(envelope).unwrap();

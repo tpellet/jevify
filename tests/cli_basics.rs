@@ -444,6 +444,93 @@ fn removed_commands_report_one_corrected_line_and_usage_envelopes() {
 }
 
 #[test]
+fn usage_errors_name_the_callers_command_corrected() {
+    for (args, example) in [
+        (vec!["pik", "the", "fix"], "jevify pick 'the fix'"),
+        (vec!["label", "bug", "feature"], "jevify label bug,feature"),
+        (vec!["is", "a", "refund", "-v"], "jevify is 'a refund'"),
+        (vec!["pick"], "jevify pick '<what the line you want says>'"),
+        (
+            vec!["fill", "git", "switch", "@{branch:x}"],
+            "jevify fill -- git switch '@{branch:x}'",
+        ),
+        (vec!["pick", "-n", "0", "x"], "jevify pick -n 1 x"),
+    ] {
+        let out = common::bin()
+            .args(&args)
+            .write_stdin("a\n")
+            .output()
+            .unwrap();
+        assert_eq!(out.status.code(), Some(2), "{args:?}");
+        let stderr = String::from_utf8(out.stderr).unwrap();
+        assert!(stderr.contains(example), "{args:?}: {stderr}");
+        assert!(
+            !stderr.contains("capabilities --json"),
+            "{args:?}: {stderr}"
+        );
+        let out = common::bin()
+            .arg("--json")
+            .args(&args)
+            .write_stdin("a\n")
+            .output()
+            .unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        assert_eq!(value["exit_code"], 2, "{args:?}");
+        assert_eq!(value["error"]["kind"], "usage");
+        assert_eq!(
+            value["error"]["example"],
+            example.replacen("jevify", "jevify --json", 1),
+            "{args:?}"
+        );
+    }
+    // An unknown verb says which jevify answered and how to get a newer one.
+    let stderr =
+        String::from_utf8(common::bin().args(["pik", "x"]).output().unwrap().stderr).unwrap();
+    assert!(
+        stderr.starts_with("jevify: error: unrecognized subcommand 'pik'"),
+        "{stderr}"
+    );
+    assert!(stderr.contains(concat!(
+        "jevify ",
+        env!("CARGO_PKG_VERSION"),
+        " has no verb pik"
+    )));
+    assert!(stderr.contains("cargo install jevify"));
+}
+
+#[test]
+fn verb_options_before_the_verb_are_read_as_the_verbs() {
+    // `why` with no input is an input error, not a usage error about --no-save or -C.
+    for args in [
+        vec!["--no-save", "why"],
+        vec!["-C", "5", "why"],
+        vec!["--json", "--no-save", "why"],
+    ] {
+        let out = common::bin().args(&args).write_stdin("").output().unwrap();
+        assert_eq!(out.status.code(), Some(6), "{args:?} {out:?}");
+    }
+    let stderr = String::from_utf8(
+        common::bin()
+            .args(["--no-save", "why"])
+            .write_stdin("")
+            .output()
+            .unwrap()
+            .stderr,
+    )
+    .unwrap();
+    assert!(
+        stderr.contains("try:  cargo test 2>&1 | jevify why --no-save"),
+        "{stderr}"
+    );
+    // An option no verb has stays an error.
+    common::bin()
+        .args(["--nope", "why"])
+        .write_stdin("")
+        .assert()
+        .code(2);
+}
+
+#[test]
 fn clap_errors_preserve_non_utf8_args_and_stop_format_scanning_at_double_dash() {
     use std::os::unix::ffi::OsStringExt;
     for json in [false, true] {

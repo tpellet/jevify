@@ -164,7 +164,7 @@ pub async fn run(ctx: &Config, intent: &str, machine: bool) -> Result<Outcome, J
                 r.fit
             );
             for (n, p) in r.alternatives.iter().take(3) {
-                eprintln!("  closest: {n} ({p:.2})");
+                eprintln!("  nearest (not chosen): {n} ({p:.2})");
             }
         }
         return Ok(Outcome {

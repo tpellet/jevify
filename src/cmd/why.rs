@@ -340,6 +340,23 @@ pub async fn run(
     });
     if let Some(h) = &hint {
         eprintln!("jevify why: {h}");
+    } else if causes.is_empty() {
+        let nearest = super::closest(&ranking, |i| {
+            format!("line {}: {}", kept[i] + 1, lines[kept[i]])
+        });
+        eprintln!(
+            "{}",
+            super::abstain_line(
+                "why",
+                "no line looks like the cause",
+                &nearest,
+                &super::abstain_hint(
+                    &ranking,
+                    ctx.threshold,
+                    "pipe the failing step's own output, with 2>&1, not a summary of it"
+                )
+            )
+        );
     }
     Ok(Outcome {
         exit: if causes.is_empty() {
