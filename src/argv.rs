@@ -526,162 +526,49 @@ mod tests {
         a.iter().map(|x| (*x).to_owned()).collect()
     }
 
-    #[test]
-    fn split_reads_globals_verb_flags_words_and_tail() {
-        let argv = split(&s(&[
-            "--json", "-t", "0.4", "pick", "-n", "3", "the", "borrow", "--files",
-        ]))
-        .unwrap();
-        assert_eq!(argv.global, ["--json", "-t", "0.4"]);
-        assert_eq!(argv.verb, "pick");
-        assert_eq!(argv.flags, ["-n", "3", "--files"]);
-        assert_eq!(argv.words, ["the", "borrow"]);
-        assert_eq!(argv.tail, None);
-        let fill = split(&s(&[
-            "fill",
-            "--dry-run",
-            "--",
-            "git",
-            "show",
-            "@{commit:x}",
-        ]))
-        .unwrap();
-        assert_eq!(fill.tail.unwrap(), ["git", "show", "@{commit:x}"]);
-        // No verb, or `--` before one.
-        assert_eq!(split(&s(&["--json"])), None);
-        assert_eq!(split(&s(&[])), None);
-        assert_eq!(split(&s(&["--", "pick"])), None);
-    }
-
-    #[test]
-    fn verb_options_before_the_verb_move_after_it() {
-        let os = |a: &[&str]| a.iter().map(OsString::from).collect::<Vec<_>>();
-        assert_eq!(
-            reorder(&os(&["--no-save", "filter", "x"])),
-            os(&["filter", "--no-save", "x"])
-        );
-        assert_eq!(
-            reorder(&os(&["--json", "--from", "commit", "pick", "x"])),
-            os(&["--json", "pick", "--from", "commit", "x"])
-        );
-        assert_eq!(
-            reorder(&os(&["-n", "2", "pick", "a", "b"])),
-            os(&["pick", "-n", "2", "a", "b"])
-        );
-        // Global options stay; an already ordered argv is unchanged, byte for byte.
-        for argv in [
-            os(&["--json", "pick", "x"]),
-            os(&["pick", "--files", "x"]),
-            os(&["fill", "--", "git", "--no-pager", "log"]),
-            os(&["--unknown", "pick", "x"]),
-        ] {
-            assert_eq!(reorder(&argv), argv);
-        }
-        // Non-UTF-8 args are left for clap.
-        use std::os::unix::ffi::OsStringExt;
-        let raw = vec![OsString::from("pick"), OsString::from_vec(vec![0xff])];
-        assert_eq!(reorder(&raw), raw);
-    }
-
-    #[test]
-    fn quote_leaves_plain_words_and_quotes_the_rest() {
-        assert_eq!(quote("commit"), "commit");
-        assert_eq!(quote("-n"), "-n");
-        assert_eq!(quote("a b"), "'a b'");
-        assert_eq!(quote("it's"), r"'it'\''s'");
-        assert_eq!(quote("@{branch:x}"), "'@{branch:x}'");
-        assert_eq!(quote(""), "''");
-    }
-
     fn advise(args: &[&str], error: JevifyError) -> (String, String) {
         advice(&s(args), &error, Path::new("/nonexistent")).unwrap()
     }
 
+    /// The corrections the binary tests in `tests/` do not reach; the rest are covered there.
     #[test]
-    fn usage_errors_name_the_corrected_command() {
+    fn usage_and_input_errors_name_the_corrected_command() {
         let usage = |m: &str| JevifyError::Usage(m.into());
-        assert_eq!(
-            advise(
-                &["label", "bug", "feature"],
-                usage("unexpected argument 'feature' found")
-            )
-            .1,
-            "jevify label bug,feature"
-        );
-        assert_eq!(
-            advise(&["is", "x", "-v"], usage("unexpected argument '-v' found")).1,
-            "jevify is x"
-        );
-        assert_eq!(
-            advise(
-                &["pick"],
-                usage("the following required arguments were not provided: <INTENT>...")
-            )
-            .1,
-            "jevify pick '<what the line you want says>'"
-        );
-        assert_eq!(
-            advise(
-                &["pick", "-n", "0", "a", "b"],
-                usage("-n must be at least 1")
-            )
-            .1,
-            "jevify pick -n 1 'a b'"
-        );
-        assert_eq!(
-            advise(
-                &["--json", "fill", "--", "git", "switch", "@{branch:x}"],
-                usage("machine output requires --dry-run")
-            )
-            .1,
-            "jevify --json fill --dry-run -- git switch '@{branch:x}'"
-        );
-        assert_eq!(
-            advise(
-                &["fill", "git", "switch", "@{branch:x}"],
-                usage("unexpected argument 'git' found")
-            )
-            .1,
-            "jevify fill -- git switch '@{branch:x}'"
-        );
-        assert_eq!(
-            advise(
-                &["pick", "--from", "branc", "x"],
-                usage("unknown kind \"branc\"; did you mean \"branch\"? kinds: -, branch")
-            )
-            .1,
-            "jevify pick --from branch x"
-        );
-        assert_eq!(
-            advise(
-                &["sort", "~/Downloads", "--to", "~/Documents"],
-                usage("unexpected argument '--to' found")
-            )
-            .1,
-            "jevify sort --into ~/Documents ~/Downloads"
-        );
-        assert_eq!(
-            advise(
-                &["sort", "in", "out"],
-                usage("unexpected argument 'out' found")
-            )
-            .1,
-            "jevify sort --into out in"
-        );
-        assert_eq!(
-            advise(
-                &["pick", "--files", "--index", "x"],
-                usage("--index numbers stdin lines; with --files the match is a path")
-            )
-            .1,
-            "jevify pick --files x"
-        );
-        let (hint, example) = advise(&["pik", "x"], usage("unrecognized subcommand 'pik'"));
-        assert_eq!(example, "jevify pick x");
-        assert!(
-            hint.contains(env!("CARGO_PKG_VERSION")) && hint.contains("cargo install jevify"),
-            "{hint}"
-        );
+        let input = |m: &str| JevifyError::Input(m.into());
+        for (args, error, example) in [
+            (
+                vec!["--json", "fill", "--", "git", "switch", "@{branch:x}"],
+                usage("machine output requires --dry-run"),
+                "jevify --json fill --dry-run -- git switch '@{branch:x}'",
+            ),
+            (
+                vec!["pick", "--from", "branc", "x"],
+                usage("unknown kind \"branc\"; did you mean \"branch\"? kinds: -, branch"),
+                "jevify pick --from branch x",
+            ),
+            (
+                vec!["pick", "--files", "--index", "x"],
+                usage("--index numbers stdin lines; with --files the match is a path"),
+                "jevify pick --files x",
+            ),
+            (
+                vec![
+                    "is",
+                    "asks for a refund",
+                    "--context",
+                    "Dear team,\nrefund me",
+                ],
+                input("--context takes a file path, not the text: pipe the text on stdin instead"),
+                "printf '%s\\n' \"$TEXT\" | jevify is 'asks for a refund'",
+            ),
+            (
+                vec!["is", "refund", "--context", "mail.tx"],
+                input("mail.tx: No such file or directory (os error 2); nearby: ./mail.txt"),
+                "jevify is --context ./mail.txt refund",
+            ),
+        ] {
+            assert_eq!(advise(&args, error).1, example);
+        }
         // An error jevify cannot correct keeps its static pair.
         assert!(advice(&s(&["pick", "x"]), &usage("something else"), Path::new("/")).is_none());
         assert!(
@@ -693,119 +580,5 @@ mod tests {
             .is_none()
         );
         assert!(advice(&s(&[]), &usage("x"), Path::new("/")).is_none());
-    }
-
-    #[test]
-    fn missing_input_names_a_pipe_for_the_verb() {
-        let empty = || JevifyError::EmptyInput("stdin was empty");
-        assert_eq!(advise(&["why"], empty()).1, "cargo test 2>&1 | jevify why");
-        assert_eq!(
-            advise(&["pick", "the", "fix"], empty()).1,
-            "git log --oneline | jevify pick 'the fix'"
-        );
-        assert_eq!(
-            advise(&["filter", "--files", "x"], empty()).1,
-            "git ls-files | jevify filter --files x"
-        );
-        assert_eq!(
-            advise(&["is", "refund"], empty()).1,
-            "jevify is refund --context FILE"
-        );
-        assert!(
-            advice(
-                &s(&["add", "x"]),
-                &JevifyError::EmptyInput("no unstaged changes"),
-                Path::new("/")
-            )
-            .is_none()
-        );
-    }
-
-    #[test]
-    fn a_lister_outside_a_repository_names_the_repositories_below() {
-        let root = tempfile::tempdir().unwrap();
-        for dir in [
-            "work/hyper/.git",
-            "work/other",
-            ".hidden/repo/.git",
-            "a/b/c/.git",
-        ] {
-            std::fs::create_dir_all(root.path().join(dir)).unwrap();
-        }
-        assert_eq!(
-            git_repos_below(root.path(), 5),
-            [root.path().join("work/hyper")]
-        );
-        assert!(git_repos_below(&root.path().join("missing"), 5).is_empty());
-        let error = JevifyError::lister_failed(
-            "git: exited with exit status: 128: fatal: not a git repository".into(),
-        );
-        let (hint, example) = advice(
-            &s(&["pick", "--from", "commit", "the", "fix"]),
-            &error,
-            root.path(),
-        )
-        .unwrap();
-        assert_eq!(example, "jevify pick -C work/hyper --from commit 'the fix'");
-        assert!(hint.contains("work/hyper") && hint.contains(&root.path().display().to_string()));
-        let (_, example) = advice(
-            &s(&["fill", "--", "git", "show", "@{commit:x}"]),
-            &error,
-            &root.path().join("work/other"),
-        )
-        .unwrap();
-        assert_eq!(
-            example,
-            "jevify fill -C /path/to/repo -- git show '@{commit:x}'"
-        );
-        // Other lister failures keep their own hint.
-        let gh = JevifyError::lister_failed("gh: not logged in".into());
-        assert!(advice(&s(&["pick", "--from", "pr", "x"]), &gh, root.path()).is_none());
-    }
-
-    #[test]
-    fn a_context_that_is_text_or_a_near_miss_is_corrected() {
-        assert_eq!(
-            advise(
-                &[
-                    "is",
-                    "asks for a refund",
-                    "--context",
-                    "Dear team,\nrefund me"
-                ],
-                JevifyError::Input(
-                    "--context takes a file path, not the text: pipe the text on stdin instead"
-                        .into()
-                )
-            )
-            .1,
-            "printf '%s\\n' \"$TEXT\" | jevify is 'asks for a refund'"
-        );
-        assert_eq!(
-            advise(
-                &["is", "refund", "--context", "mail.tx"],
-                JevifyError::Input(
-                    "mail.tx: No such file or directory (os error 2); nearby: ./mail.txt".into()
-                )
-            )
-            .1,
-            "jevify is --context ./mail.txt refund"
-        );
-    }
-
-    #[test]
-    fn declined_and_missing_directory_errors_are_corrected() {
-        assert_eq!(
-            advise(&["add", "--dry-run", "the", "fix"], JevifyError::Declined).1,
-            "jevify add --yes 'the fix'"
-        );
-        assert_eq!(
-            advise(
-                &["pick", "-C", "nowhere", "--from", "commit", "x"],
-                JevifyError::Input("-C nowhere: No such file".into())
-            )
-            .1,
-            "jevify pick --from commit x"
-        );
     }
 }

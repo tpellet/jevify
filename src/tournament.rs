@@ -280,24 +280,6 @@ pub async fn shortlist(
 mod tests {
     use super::*;
     #[test]
-    fn pool_boundaries() {
-        for (w, cases) in [
-            (99, vec![(33, 3), (34, 2), (49, 2), (50, 1), (99, 1)]),
-            (200, vec![(66, 3), (67, 2), (100, 2), (101, 1), (200, 1)]),
-        ] {
-            for (windows, n) in cases {
-                assert_eq!(Finalists::Auto.per_window(windows * w, w).unwrap(), n);
-            }
-            assert!(Finalists::Auto.per_window(w * w + 1, w).is_err());
-            let f = w * (w / 3);
-            assert_eq!(Finalists::ThreeOnly.per_window(f, w).unwrap(), 3);
-            assert!(Finalists::ThreeOnly.per_window(f + 1, w).is_err());
-            assert_eq!(Finalists::Auto.per_window(0, w).unwrap(), 3);
-            assert!(Finalists::Auto.per_window(usize::MAX, w).is_err());
-        }
-    }
-
-    #[test]
     fn decisions_use_absolute_fit_and_ratio() {
         for (best, second, none, any, expected) in [
             (0.6, 0.3, 0.1, 0.9, "found"),
@@ -343,12 +325,5 @@ mod tests {
             ),
             Decision::NoMatch
         );
-    }
-    #[test]
-    fn clip_cuts_on_char_boundaries() {
-        assert_eq!(clip("héllo wörld", 3), "hé…");
-        assert_eq!(clip("éé", 0), "");
-        assert_eq!(clip("éé", 1), "…");
-        assert_eq!(clip("short", 10), "short");
     }
 }

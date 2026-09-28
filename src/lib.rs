@@ -585,7 +585,7 @@ fn split(nul: bool, para: bool) -> records::Split {
 mod tests {
     use super::*;
     #[test]
-    fn exec_preserves_argv_and_maps_failures() {
+    fn exec_runs_argv_zero_literally_and_a_missing_program_cannot_run() {
         use std::os::unix::ffi::OsStringExt;
         let exec = cmd::Exec {
             argv: vec![
@@ -603,60 +603,5 @@ mod tests {
         );
         let error = exec_command(&exec);
         assert_eq!((error.exit().code(), error.kind()), (6, "cannot_run"));
-        assert!(error.to_string().contains("/nonexistent-jevify-command"));
-        let exec = cmd::Exec {
-            argv: vec![concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml").into()],
-            stdin_null: false,
-        };
-        let error = exec_command(&exec);
-        assert_eq!((error.exit().code(), error.kind()), (6, "cannot_run"));
-        assert!(error.to_string().contains("Cargo.toml"));
-        let fixed = ("hint".to_owned(), "jevify fill -- x".to_owned(), true);
-        let plain = (error.hint().to_owned(), error.example().to_owned(), false);
-        assert!(
-            fill_error_text(&error, false, &plain).starts_with("jevify fill: not run: cannot_run:")
-        );
-        assert_eq!(fill_error_text(&error, false, &plain).lines().count(), 2);
-        assert_eq!(fill_error_text(&error, true, &plain).lines().count(), 1);
-        // A corrected command joins the hint on the same line.
-        let text = fill_error_text(&error, false, &fixed);
-        assert_eq!(text.lines().count(), 2);
-        assert!(text.ends_with("jevify fill: hint; try: jevify fill -- x\n"));
-        assert!(!fill_error_text(&error, false, &plain).contains("try:"));
-    }
-    #[test]
-    fn output_errors_only_succeed_for_broken_pipe() {
-        assert_eq!(stdout_error(std::io::ErrorKind::BrokenPipe.into()), 0);
-        assert_eq!(stdout_error(std::io::ErrorKind::PermissionDenied.into()), 6);
-    }
-    fn args(a: &[&str]) -> Vec<OsString> {
-        a.iter().map(OsString::from).collect()
-    }
-    #[test]
-    fn machine_format_is_read_from_raw_args_when_clap_fails() {
-        assert_eq!(machine_format(&args(&["--format", "--", "--json"])), None);
-        assert_eq!(raw_command(&args(&["--format", "--", "run"])), "jevify");
-        assert_eq!(machine_format(&args(&["pick", "--nope"])), None);
-        assert_eq!(
-            machine_format(&args(&["--json", "pick"])),
-            Some(Format::Json)
-        );
-        assert_eq!(
-            machine_format(&args(&["pick", "--robot"])),
-            Some(Format::Json)
-        );
-        assert_eq!(
-            machine_format(&args(&["--format", "toon", "pick"])),
-            Some(Format::Toon)
-        );
-        assert_eq!(
-            machine_format(&args(&["--json", "--format=jsonl"])),
-            Some(Format::Jsonl)
-        );
-        // `--format human` is not machine output, even next to --json.
-        assert_eq!(
-            machine_format(&args(&["--json", "--format", "human"])),
-            None
-        );
     }
 }

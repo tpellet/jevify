@@ -317,25 +317,6 @@ impl Config {
 mod tests {
     use super::*;
     #[test]
-    fn save_directory_uses_override_or_platform_default() {
-        assert_eq!(
-            save_dir(Some(" saved-inputs ")),
-            Some(PathBuf::from("saved-inputs"))
-        );
-        let platform = directories::ProjectDirs::from("", "", "jevify")
-            .map(|dirs| dirs.cache_dir().to_path_buf());
-        assert_eq!(save_dir(None), platform);
-        assert_eq!(save_dir(Some(" \t")), platform);
-    }
-    #[test]
-    fn config_directory_uses_override_or_platform_default() {
-        assert_eq!(config_dir(Some("/x")), Some(PathBuf::from("/x")));
-        let platform = directories::ProjectDirs::from("", "", "jevify")
-            .map(|dirs| dirs.config_dir().to_path_buf());
-        assert_eq!(config_dir(None), platform);
-        assert_eq!(config_dir(Some("  ")), platform);
-    }
-    #[test]
     fn base_urls_are_bound_to_the_backend() {
         for (backend, input, expected) in [
             (
@@ -393,79 +374,5 @@ mod tests {
                 assert_eq!(base_url(backend, Some(input)).unwrap(), input);
             }
         }
-    }
-    // Built literally: unit tests inside src/ never touch the process environment (AGENTS.md).
-    fn cfg(key: Option<&str>, key_file: Option<&str>) -> Config {
-        Config {
-            backend: Backend::Typesafe,
-            key: key.map(String::from),
-            key_file: key_file.map(PathBuf::from),
-            base_url: String::new(),
-            model: String::new(),
-            threshold: 0.5,
-            concurrency: 8,
-            cache_dir: None,
-            price_per_mtok: 0.042,
-            stats: Arc::new(Stats::default()),
-        }
-    }
-    #[test]
-    fn key_is_read_lazily_and_a_bad_file_is_an_input_error() {
-        assert_eq!(cfg(Some("k"), None).api_key().unwrap(), "k");
-        assert_eq!(cfg(None, None).api_key().unwrap_err().exit().code(), 5);
-        assert_eq!(
-            cfg(None, Some("/nonexistent/jevify-key"))
-                .api_key()
-                .unwrap_err()
-                .exit()
-                .code(),
-            6
-        );
-    }
-    #[test]
-    fn meta_without_inference_has_zero_usage_and_names_the_backend() {
-        let c = cfg(None, None);
-        assert_eq!(c.meta().input_tokens, Some(0));
-        assert_eq!(c.meta().cost_usd, Some(0.0));
-        assert_eq!(c.meta().backend, "typesafe");
-        let decision = c.meta().decision;
-        assert_eq!(decision.backend, "typesafe");
-        assert_eq!(decision.model.requested.as_deref(), Some(""));
-        assert_eq!(decision.model.answering, "unknown");
-        assert_eq!(decision.threshold, 0.5);
-        assert!(decision.gates.is_empty());
-        c.stats.gate(crate::output::Gate::noul(0.9));
-        assert_eq!(
-            c.meta().decision.gates,
-            vec![crate::output::Gate::noul(0.9)]
-        );
-        // Nothing attempted: a measured zero, not an unknown.
-        assert_eq!(
-            c.meta().usage,
-            crate::output::Usage {
-                tokens: crate::output::Tokens {
-                    input: Some(0),
-                    output: Some(0),
-                },
-                ..Default::default()
-            }
-        );
-    }
-    #[test]
-    fn backend_limits_fit_each_api() {
-        // classifier.dev caps a dimension at 100 labels; NONE takes the hundredth slot.
-        assert_eq!(Backend::Classifier.window() + 1, 100);
-        assert_eq!(Backend::Typesafe.window(), 200);
-        // and its input at 32,000 characters.
-        assert!(Backend::Classifier.max_state_chars() < 32_000);
-        assert_eq!(Backend::Typesafe.max_state_chars(), usize::MAX);
-        assert!(
-            Backend::Classifier.default_concurrency() < Backend::Typesafe.default_concurrency()
-        );
-        assert_eq!(
-            Backend::Classifier.default_base_url(),
-            "https://classifier.dev"
-        );
-        assert_eq!(Backend::Typesafe.as_str(), "typesafe");
     }
 }

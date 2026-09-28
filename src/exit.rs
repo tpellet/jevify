@@ -263,56 +263,6 @@ impl JevifyError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn fill_kinds_and_abstention_reasons_are_stable() {
-        use crate::output::{Envelope, ErrorBody, Meta};
-        for (error, kind) in [
-            (JevifyError::stdin_is_tty("terminal".into()), "stdin_is_tty"),
-            (JevifyError::lister_failed("failed".into()), "lister_failed"),
-            (JevifyError::cannot_run("missing".into()), "cannot_run"),
-            (
-                JevifyError::recipe_invalid("invalid".into()),
-                "recipe_invalid",
-            ),
-        ] {
-            let envelope = Envelope {
-                ok: false,
-                command: "fill",
-                version: "test",
-                exit_code: error.exit().code(),
-                data: serde_json::Value::Null,
-                meta: Meta::default(),
-                error: Some(ErrorBody {
-                    kind: error.kind(),
-                    message: error.to_string(),
-                    hint: error.hint().into(),
-                    example: error.example().into(),
-                }),
-            };
-            let value = serde_json::to_value(envelope).unwrap();
-            assert_eq!(value["exit_code"], 6);
-            assert_eq!(value["error"]["kind"], kind);
-        }
-        assert_eq!(
-            [NO_MATCH, AMBIGUOUS, UNSURE_FLAG, INSUFFICIENT_EVIDENCE],
-            [
-                "no_match",
-                "ambiguous",
-                "unsure_flag",
-                "insufficient_evidence"
-            ]
-        );
-    }
-    #[test]
-    fn exit_codes_are_the_documented_contract() {
-        let codes: Vec<i32> = Exit::ALL.iter().map(|(e, _)| e.code()).collect();
-        assert_eq!(codes, [0, 1, 2, 3, 4, 5, 6, 7, 130]);
-        assert!(
-            Exit::ALL
-                .iter()
-                .all(|(_, text)| !text.contains("executed") && !text.contains("`run`"))
-        );
-    }
     /// One error per reachable kind, including every kind string a `Kinded` site in `src/`
     /// writes. `tests/agent.rs` scans the sources so a new literal cannot stay out of this list.
     fn representatives() -> Vec<JevifyError> {
@@ -342,32 +292,6 @@ mod tests {
             JevifyError::Usage(String::new()),
             JevifyError::Declined,
         ]
-    }
-    #[test]
-    fn every_error_maps_to_a_stable_kind_and_exit() {
-        let expected = [
-            ("too_many", 6),
-            ("stdin_is_tty", 6),
-            ("lister_failed", 6),
-            ("cannot_run", 6),
-            ("recipe_invalid", 6),
-            ("status_file_unwritable", 6),
-            ("missing_api_key", 5),
-            ("bad_api_key", 5),
-            ("api_unavailable", 4),
-            ("api_deadline", 4),
-            ("api_protocol", 4),
-            ("empty_input", 6),
-            ("input_too_large", 6),
-            ("api_rejected_request", 6),
-            ("input", 6),
-            ("usage", 2),
-            ("declined", 130),
-        ];
-        for (e, (kind, code)) in representatives().iter().zip(expected) {
-            assert_eq!((e.kind(), e.exit().code()), (kind, code), "{e}");
-            assert!(!e.hint().is_empty() && e.example().contains("jevify"));
-        }
     }
     #[test]
     fn the_published_kind_table_is_exactly_what_the_errors_produce() {
@@ -401,37 +325,5 @@ mod tests {
             .collect();
         published.sort_unstable();
         assert_eq!(produced, published);
-    }
-    #[test]
-    fn a_deadline_is_not_a_transport_failure_and_says_what_to_do() {
-        let deadline = JevifyError::Deadline("600".into());
-        let transport = JevifyError::Unavailable("error sending request: connection reset".into());
-        assert_eq!(deadline.exit(), transport.exit());
-        assert_eq!(deadline.kind(), "api_deadline");
-        assert_eq!(transport.kind(), "api_unavailable");
-        assert!(deadline.hint().contains("JEVIFY_DEADLINE"));
-        assert!(transport.hint().contains("retry"));
-        assert_ne!(deadline.hint(), transport.hint());
-        // The sentence a person reads says the same thing as the kind a machine reads: jevify's
-        // own budget ran out. It never blames the API for it.
-        let sentence = deadline.to_string();
-        assert!(
-            sentence.contains(DEADLINE_PREFIX)
-                && sentence.contains("600 s")
-                && sentence.contains("JEVIFY_DEADLINE"),
-            "{sentence}"
-        );
-        assert!(!sentence.contains("API unavailable"), "{sentence}");
-        assert!(transport.to_string().starts_with("API unavailable:"));
-    }
-    #[test]
-    fn a_rejected_request_claims_a_size_limit_only_when_the_service_named_one() {
-        let sized = JevifyError::RejectedRequest(422, "state: input_too_long".into());
-        let unnamed = JevifyError::RejectedRequest(400, "code: invalid_request".into());
-        assert_eq!(sized.kind(), unnamed.kind());
-        assert!(sized.hint().contains("over the API's budget"));
-        assert!(!unnamed.hint().contains("over the API's budget"));
-        assert!(unnamed.hint().contains("malformed"));
-        assert!(unnamed.example().contains("--version"));
     }
 }

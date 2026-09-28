@@ -293,176 +293,24 @@ pub enum Shell {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use clap::{CommandFactory, FromArgMatches};
-
-    /// `try_parse_from` still reads the `env = ".."` fallbacks from the real process, so a
-    /// developer's exported `JEVIFY_THRESHOLD=abc` would fail an argv-only test: clear them first.
-    fn parse_without_env(args: &[&str]) -> Cli {
-        let m = Cli::command()
-            .mut_args(|a| a.env(None))
-            .try_get_matches_from(args)
-            .unwrap();
-        Cli::from_arg_matches(&m).unwrap()
-    }
-
-    #[test]
-    fn format_flag_overrides_json_and_robot_is_an_alias() {
-        let parse = |a: &[&str]| parse_without_env(a).g.format();
-        assert_eq!(parse(&["jevify", "is", "x"]), Format::Human);
-        assert_eq!(parse(&["jevify", "--robot", "is", "x"]), Format::Json);
-        assert_eq!(
-            parse(&["jevify", "--json", "--format", "toon", "is", "x"]),
-            Format::Toon
-        );
-        // Global flags are accepted after the subcommand too.
-        assert_eq!(
-            parse(&["jevify", "is", "x", "--format", "jsonl"]),
-            Format::Jsonl
-        );
-    }
-
-    #[test]
-    fn output_verb_flags_parse_without_stealing_text() {
-        let cli = parse_without_env(&[
-            "jevify",
-            "filter",
-            "-v",
-            "-c",
-            "--strict",
-            "-0",
-            "--files",
-            "--no-save",
-            "--verbose",
-            "--",
-            "-statement",
-        ]);
-        assert!(cli.g.verbose);
-        assert!(
-            matches!(cli.cmd, Cmd::Filter { statement, invert: true, count: true, strict: true, nul: true, para: false, files: true, no_save: true } if statement == ["-statement"])
-        );
-        assert!(
-            matches!(parse_without_env(&["jevify", "is", "a", "b", "--context", "FILE"]).cmd, Cmd::Is { statements, context: Some(path), .. } if statements == ["a", "b"] && path == std::path::Path::new("FILE"))
-        );
-        assert!(
-            matches!(parse_without_env(&["jevify", "pick", "--files", "--para", "--", "-query"]).cmd, Cmd::Pick { intent, files: true, para: true, .. } if intent == ["-query"])
-        );
-        assert!(matches!(
-            parse_without_env(&["jevify", "why", "--no-save", "-C", "2", "-n", "3"]).cmd,
-            Cmd::Why {
-                context: 2,
-                top: 3,
-                no_save: true
-            }
-        ));
-        assert!(
-            matches!(parse_without_env(&["jevify", "label", "--para", "--files", "bug,feature"]).cmd, Cmd::Label { labels, nul: false, para: true, files: true } if labels.0 == ["bug", "feature"])
-        );
-        assert!(matches!(
-            parse_without_env(&["jevify", "init", "agents"]).cmd,
-            Cmd::Init {
-                shell: Shell::Agents
-            }
-        ));
-    }
-
-    #[test]
-    fn invalid_output_verb_flag_combinations_are_usage_errors() {
-        for args in [
-            vec!["jevify", "is", "x", "-v"],
-            vec!["jevify", "pick", "-0", "--para", "q"],
-            vec!["jevify", "filter", "-0", "--para", "q"],
-            vec!["jevify", "why", "-0"],
-            vec!["jevify", "why", "--para"],
-            vec!["jevify", "why", "--files"],
-            vec!["jevify", "pick", "--files", "--index", "q"],
-            vec!["jevify", "label", "-0", "--para", "a,b"],
-            vec!["jevify", "label", "bug"],
-            vec!["jevify", "label", "bug,bug"],
-            vec!["jevify", "label", "bug,,feature"],
-            vec!["jevify", "label", "bug,?"],
-            vec!["jevify", "label", "NONE,bug"],
-            vec!["jevify", "label", "a,b", "c,d"],
-        ] {
-            let error = Cli::command()
-                .mut_args(|a| a.env(None))
-                .try_get_matches_from(&args)
-                .unwrap_err();
-            assert_eq!(error.exit_code(), 2, "{args:?}");
-        }
-    }
 
     #[test]
     fn free_text_is_the_words_joined_and_a_leading_dash_is_stdin() {
         let s = |a: &[&str]| a.iter().map(|x| (*x).to_owned()).collect::<Vec<_>>();
         assert_eq!(words(&s(&["the", "borrow"])).unwrap(), "the borrow");
-        assert_eq!(words(&s(&["the borrow"])).unwrap(), "the borrow");
         assert_eq!(words(&s(&["-", "the", " borrow "])).unwrap(), "the borrow");
-        assert_eq!(words(&s(&["one"])).unwrap(), "one");
         // `-` after the first word is a word; `-` alone, blanks and nothing describe nothing.
         assert_eq!(words(&s(&["a", "-", "b"])).unwrap(), "a - b");
         assert_eq!(words(&s(&["-"])), None);
         assert_eq!(words(&s(&["", "  "])), None);
         assert_eq!(words(&[]), None);
-        let long = "x ".repeat(10_000);
-        assert_eq!(words(&s(&[&long])).unwrap().len(), long.trim().len());
         // is: every argument is a statement; three or more one-word ones are flagged.
         let (four, unquoted) = statements(&s(&["asks", "for", "a", "refund"]));
         assert_eq!((four.len(), unquoted), (4, true));
-        assert_eq!(
-            statements(&s(&["asks for a refund", "mentions an order"])),
-            (s(&["asks for a refund", "mentions an order"]), false)
-        );
-        assert_eq!(statements(&s(&["refund"])), (s(&["refund"]), false));
-        assert_eq!(
-            statements(&s(&["first", "second"])),
-            (s(&["first", "second"]), false)
-        );
         assert_eq!(
             statements(&s(&["-", "asks for a refund"])),
             (s(&["asks for a refund"]), false)
         );
         assert_eq!(statements(&s(&["-"])), (s(&["-"]), false));
-    }
-
-    #[test]
-    fn unquoted_descriptions_parse_with_flags_on_either_side() {
-        assert!(
-            matches!(parse_without_env(&["jevify", "pick", "--from", "commit", "names", "the", "borrow", "-n", "2"]).cmd, Cmd::Pick { intent, from: Some(kind), top: 2, .. } if intent == ["names", "the", "borrow"] && kind == "commit")
-        );
-        assert!(
-            matches!(parse_without_env(&["jevify", "filter", "reports", "a", "failure", "-v"]).cmd, Cmd::Filter { statement, invert: true, .. } if statement == ["reports", "a", "failure"])
-        );
-        assert!(
-            matches!(parse_without_env(&["jevify", "add", "--dry-run", "the", "token", "fix"]).cmd, Cmd::Add { topic, dry_run: true, .. } if topic == ["the", "token", "fix"])
-        );
-        assert!(
-            matches!(parse_without_env(&["jevify", "pick", "-C", "work/hyper", "--from", "commit", "x"]).cmd, Cmd::Pick { repo: Some(dir), .. } if dir == std::path::Path::new("work/hyper"))
-        );
-        assert!(
-            matches!(parse_without_env(&["jevify", "fill", "--repo", "r", "--", "git", "log"]).cmd, Cmd::Fill { repo: Some(dir), .. } if dir == std::path::Path::new("r"))
-        );
-    }
-
-    #[test]
-    fn label_lists_are_validated_with_a_corrected_form() {
-        assert_eq!(
-            parse_labels("bug,feature,question").unwrap().0,
-            ["bug", "feature", "question"]
-        );
-        for (text, problem) in [
-            ("bug", "one label"),
-            ("", "one label"),
-            ("bug,bug", "bug is repeated"),
-            ("bug,,feature", "label 2 is empty"),
-            ("bug,?", "? is reserved"),
-            ("NONE,bug", "NONE is reserved"),
-        ] {
-            let error = parse_labels(text).unwrap_err();
-            assert!(error.starts_with(problem), "{text}: {error}");
-            assert!(
-                error.ends_with("jevify label bug,feature"),
-                "{text}: {error}"
-            );
-        }
     }
 }

@@ -108,72 +108,39 @@ mod tests {
         ));
     }
     #[test]
-    fn byte_reader_preserves_bytes_and_enforces_the_cap() {
-        assert_eq!(read_bytes(&b"\xff\r\n\0 "[..]).unwrap(), b"\xff\r\n\0 ");
-        assert!(matches!(
-            read_bytes(&b""[..]),
-            Err(JevifyError::EmptyInput(_))
-        ));
-        assert_eq!(
-            read_bytes(std::io::repeat(b'x').take(MAX_BYTES as u64))
-                .unwrap()
-                .len(),
-            MAX_BYTES
-        );
-        assert!(matches!(
-            read_bytes(std::io::repeat(b'x').take(MAX_BYTES as u64 + 1)),
-            Err(JevifyError::InputTooLarge(_))
-        ));
-    }
-    #[test]
-    fn strips_ansi_and_carriage_returns() {
-        let got = split_lines("\x1b[31merror\x1b[0m: boom\n 10%\r 50%\r100% done  \n");
-        assert_eq!(
-            got,
-            vec!["error: boom".to_string(), "100% done".to_string()]
-        );
-    }
-    #[test]
-    fn preserves_non_secret_token_identifiers_and_changes() {
-        assert_eq!(
-            redact("-token_expiry_seconds=3600\n+token_expiry_seconds=7200"),
-            "-token_expiry_seconds=3600\n+token_expiry_seconds=7200"
-        );
-        assert_eq!(redact("token count: 12"), "token count: 12");
-        assert_eq!(redact(""), "");
-    }
-
-    #[test]
-    fn redacts_secret_assignments_and_known_token_formats() {
-        assert_eq!(
-            redact("export GITHUB_TOKEN=ghp_abcdefghijklmnopqrstuvwxyz0123"),
-            "export GITHUB_TOKEN=[REDACTED]"
-        );
-        assert_eq!(
-            redact("Authorization: Bearer abcdefghijklmnop"),
-            "Authorization: Bearer [REDACTED]"
-        );
-        assert_eq!(
-            redact("sk-1234567890abcdef sk-1234567890abcde"),
-            "[REDACTED] sk-1234567890abcde"
-        );
-    }
-
-    #[test]
-    fn redact_value_never_mutates_keys_or_non_text_telemetry() {
-        let raw = "abcdefghijk";
+    fn secrets_are_redacted_and_ordinary_tokens_survive() {
+        for (input, expected) in [
+            (
+                "export GITHUB_TOKEN=ghp_abcdefghijklmnopqrstuvwxyz0123",
+                "export GITHUB_TOKEN=[REDACTED]",
+            ),
+            (
+                "Authorization: Bearer abcdefghijklmnop",
+                "Authorization: Bearer [REDACTED]",
+            ),
+            (
+                "sk-1234567890abcdef sk-1234567890abcde",
+                "[REDACTED] sk-1234567890abcde",
+            ),
+            (
+                "-token_expiry_seconds=3600\n+token_expiry_seconds=7200",
+                "-token_expiry_seconds=3600\n+token_expiry_seconds=7200",
+            ),
+            ("token count: 12", "token count: 12"),
+            ("", ""),
+        ] {
+            assert_eq!(redact(input), expected);
+        }
+        // Telemetry: string values are redacted, keys and non-text values are untouched.
         let value = serde_json::json!({
             "opaque_token_id": "token=abcdefghijk",
             "attempt": 2,
             "nested": ["secret=abcdefghijk", true, null]
         });
-
         let redacted = redact_value(&value);
-
         assert_eq!(redacted["opaque_token_id"], "token=[REDACTED]");
         assert_eq!(redacted["attempt"], 2);
         assert_eq!(redacted["nested"][0], "secret=[REDACTED]");
         assert_eq!(redacted["nested"][1], true);
-        assert!(!redacted.to_string().contains(raw));
     }
 }

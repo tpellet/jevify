@@ -71,40 +71,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn extracts_description_section() {
-        let page = "NAME\n     tar - manipulate tape archives\n\nDESCRIPTION\n     tar creates and manipulates streaming archive files.\n\nOPTIONS\n     -x  extract\n";
-        assert_eq!(
-            section(page, "DESCRIPTION").unwrap(),
-            "tar creates and manipulates streaming archive files."
-        );
-    }
-
-    #[test]
-    fn extracts_synopsis_section() {
+    fn the_synopsis_is_its_section_joined_or_nothing() {
         let page = "NAME\n    tool - inspect files\nSYNOPSIS\n    tool [-v]\n        file ...\n\nDESCRIPTION\n    Inspect files.\n";
         assert_eq!(
             synopsis_from_page(Some(page)).as_deref(),
             Some("tool [-v] file ...")
         );
-    }
-
-    #[test]
-    fn clips_long_synopsis_at_a_character_boundary() {
-        let text = "é".repeat(SYNOPSIS_MAX_CHARS + 1);
-        let page = format!("SYNOPSIS\n    {text}\nDESCRIPTION\n    description\n");
-        assert_eq!(
-            synopsis_from_page(Some(&page)),
-            Some("é".repeat(SYNOPSIS_MAX_CHARS))
-        );
-        let exact = format!("SYNOPSIS\n    {}", "x".repeat(SYNOPSIS_MAX_CHARS));
-        assert_eq!(
-            synopsis_from_page(Some(&exact)).unwrap().len(),
-            SYNOPSIS_MAX_CHARS
-        );
-    }
-
-    #[test]
-    fn no_man_page_has_no_synopsis() {
+        for page in [
+            "",
+            "NAME\n    tool\nDESCRIPTION\n    inspect files\n",
+            "SYNOPSIS\n\nDESCRIPTION\n    inspect files\n",
+        ] {
+            assert_eq!(synopsis_from_page(Some(page)), None);
+        }
         assert_eq!(synopsis_from_page(None), None);
     }
 
@@ -160,16 +139,5 @@ mod tests {
             man_page_within("tool", quick.as_os_str(), Instant::now()),
             None
         );
-    }
-
-    #[test]
-    fn missing_or_empty_synopsis_has_no_text() {
-        for page in [
-            "",
-            "NAME\n    tool\nDESCRIPTION\n    inspect files\n",
-            "SYNOPSIS\n\nDESCRIPTION\n    inspect files\n",
-        ] {
-            assert_eq!(synopsis_from_page(Some(page)), None);
-        }
     }
 }

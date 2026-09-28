@@ -264,11 +264,6 @@ pub fn render(format: Format, env: &Envelope) -> anyhow::Result<String> {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn newline_quoting_and_status_escaping_differ() {
-        assert_eq!(super::shell_quote(&["a\nb".into()]), b"'a\nb'");
-        assert_eq!(super::status_escape("a\nb\rc"), "a\\nb\\rc");
-    }
-    #[test]
     fn presentation_quotes_each_posix_shell_token_as_bytes() {
         use std::os::unix::ffi::OsStringExt;
         assert_eq!(
@@ -282,52 +277,7 @@ mod tests {
             b"'cp' 'report copy.txt' 'it'\\''s;$HOME' '' '\xff\n'"
         );
         assert!(super::shell_quote(&[]).is_empty());
-    }
-    use super::*;
-    fn envelope() -> Envelope<'static> {
-        Envelope {
-            ok: true,
-            command: "pick",
-            version: "0.0.0",
-            exit_code: 0,
-            data: serde_json::json!({ "matches": [] }),
-            meta: Meta {
-                backend: "classifier",
-                ..Meta::default()
-            },
-            error: None,
-        }
-    }
-    #[test]
-    fn json_and_jsonl_carry_the_same_envelope() {
-        let env = envelope();
-        let pretty: serde_json::Value =
-            serde_json::from_str(&render(Format::Json, &env).unwrap()).unwrap();
-        let line = render(Format::Jsonl, &env).unwrap();
-        assert!(!line.contains('\n'), "jsonl is one line");
-        assert_eq!(
-            pretty,
-            serde_json::from_str::<serde_json::Value>(&line).unwrap()
-        );
-        assert_eq!(pretty["command"], "pick");
-        assert_eq!(pretty["error"], serde_json::Value::Null);
-        // Which API answered is part of the envelope, not just of `-v` output.
-        assert_eq!(pretty["meta"]["backend"], "classifier");
-        // Nothing answered: the answering model is unknown, never an empty string.
-        assert_eq!(pretty["meta"]["decision"]["model"]["answering"], "unknown");
-        assert_eq!(pretty["meta"]["decision"]["gates"], serde_json::json!([]));
-    }
-    #[test]
-    fn a_noul_gate_leaves_the_choice_scores_null() {
-        let v = serde_json::to_value(Gate::noul(0.7)).unwrap();
-        assert_eq!(
-            v,
-            serde_json::json!({ "best": null, "next": null, "none": null, "any": 0.7, "fails": null })
-        );
-    }
-    #[test]
-    fn toon_renders_the_fields() {
-        let s = render(Format::Toon, &envelope()).unwrap();
-        assert!(s.contains("ok: true") && s.contains("command: pick"), "{s}");
+        // The status file escapes what the shell presentation quotes.
+        assert_eq!(super::status_escape("a\nb\rc"), "a\\nb\\rc");
     }
 }

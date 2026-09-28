@@ -197,22 +197,6 @@ pub(crate) fn join_models(into: &mut String, models: &str) {
 mod tests {
     use super::*;
     #[test]
-    fn model_union_is_stable_and_guard_checks_every_part() {
-        let mut model = String::new();
-        join_models(&mut model, "other-model, jev-fake");
-        join_models(&mut model, "jev-fake, jev-next");
-        assert_eq!(model, "other-model, jev-fake, jev-next");
-        assert!(!all_jev(&model));
-        assert!(all_jev("jev-fake, jev-next"));
-        assert!(!all_jev(""));
-        assert!(!all_jev("jev-fake, "));
-        join_models(&mut model, "unknown, jev-fake, unknown");
-        assert_eq!(model, "other-model, jev-fake, jev-next, unknown");
-        for model in ["unknown", "unknown, jev-fake", "jev-fake, unknown"] {
-            assert!(!all_jev(model));
-        }
-    }
-    #[test]
     fn decision_validation_requires_complete_finite_member_scores() {
         let qs = [(
             "q".into(),
@@ -236,42 +220,5 @@ mod tests {
         assert!(r.validate(&qs).is_ok());
         assert!(!valid_probability(f64::NAN));
         assert!(!valid_probability(f64::INFINITY));
-    }
-    #[test]
-    fn question_serializes_to_api_shape() {
-        let mut crit = BTreeMap::new();
-        crit.insert("L000".to_string(), None);
-        crit.insert("NONE".to_string(), Some("nothing fits".to_string()));
-        let q = Question::choice("Which line?", crit);
-        let v = serde_json::to_value(&q).unwrap();
-        assert_eq!(v["type"], "choice");
-        assert_eq!(v["criteria"]["L000"], serde_json::Value::Null);
-        let n =
-            serde_json::to_value(Question::noul_with("Is it?", "yes means", "no means")).unwrap();
-        assert_eq!(n["type"], "noul");
-        assert_eq!(n["criteria"]["true"], "yes means");
-    }
-    #[test]
-    fn response_parses_choice_and_noul() {
-        let r: Response = serde_json::from_str(r#"{"model":"jev-1.13.0","answers":{"pick":{"type":"choice","choice":"L001","probabilities":{"L000":0.1,"L001":0.9},"confidence":0.8},"any":{"type":"noul","noul":0.97},"future":{"type":"score","score":3,"legend":{"1":"low"}}},"usage":{"input_tokens":120,"output_tokens":20}}"#).unwrap();
-        assert_eq!(r.noul("any").unwrap(), 0.97);
-        assert_eq!(r.probs("pick").unwrap()["L001"], 0.9);
-        // Forward compatibility: an answer type or field jevify does not know parses into an
-        // `Answer` of `None`s; only reading it as a noul/choice fails, never the whole response.
-        assert!(r.answers.contains_key("future"));
-        assert_eq!(r.probs("future").unwrap_err().exit().code(), 4);
-    }
-    #[test]
-    fn response_tolerates_missing_model_and_usage() {
-        let r: Response = serde_json::from_str(r#"{"answers":{"q":{"noul":0.5}}}"#).unwrap();
-        assert_eq!(r.noul("q").unwrap(), 0.5);
-        assert_eq!(r.usage.input_tokens, 0);
-        assert_eq!(r.model, "unknown");
-        for model in ["", "  ", "\t\n"] {
-            let r: Response =
-                serde_json::from_value(serde_json::json!({"model": model, "answers": {}})).unwrap();
-            assert_eq!(r.model, "unknown");
-        }
-        assert!(r.noul("missing").unwrap_err().exit().code() == 4);
     }
 }

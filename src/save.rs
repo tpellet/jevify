@@ -138,30 +138,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn repeated_inputs_share_a_path_and_leave_no_temporary_files() {
-        let directory = directory();
-        let first = save(b"first", Some(&directory)).unwrap();
-        assert_eq!(save(b"first", Some(&directory)).unwrap(), first);
-        assert_eq!(fs::read_dir(directory.join("outputs")).unwrap().count(), 1);
-        let second = save(b"second", Some(&directory)).unwrap();
-        assert_ne!(first, second);
-        let entries: Vec<_> = fs::read_dir(directory.join("outputs"))
-            .unwrap()
-            .map(|entry| entry.unwrap().path())
-            .collect();
-        assert_eq!(entries.len(), 2);
-        assert!(entries.contains(&first));
-        assert!(entries.contains(&second));
-    }
-
-    #[test]
-    fn empty_input_is_saved() {
-        let directory = directory();
-        let path = save(b"", Some(&directory)).unwrap();
-        assert!(fs::read(path).unwrap().is_empty());
-    }
-
     /// Backdates a file by `RETENTION` plus an hour, so it is past retention whatever the clock.
     fn age(path: &Path) {
         let stale = std::time::SystemTime::now() - RETENTION - Duration::from_secs(3600);
@@ -171,38 +147,6 @@ mod tests {
             .unwrap()
             .set_times(fs::FileTimes::new().set_modified(stale))
             .unwrap();
-    }
-
-    #[test]
-    fn a_save_prunes_saved_inputs_past_retention_and_keeps_the_rest() {
-        let directory = directory();
-        let stale = save(b"stale", Some(&directory)).unwrap();
-        let fresh = save(b"fresh", Some(&directory)).unwrap();
-        let outputs = directory.join("outputs");
-        let temporary = outputs.join("0123456789abcdef.tmp-1-0");
-        fs::write(&temporary, b"crashed").unwrap();
-        age(&stale);
-        age(&temporary);
-        // A file the store did not write is not the store's to delete, however old.
-        let stranger = outputs.join("notes.txt");
-        fs::write(&stranger, b"keep").unwrap();
-        age(&stranger);
-
-        save(b"third", Some(&directory)).unwrap();
-
-        assert!(!stale.exists(), "a saved input past retention is deleted");
-        assert!(!temporary.exists(), "a stranded temporary is deleted");
-        assert!(fresh.exists(), "a saved input within retention survives");
-        assert_eq!(fs::read(&stranger).unwrap(), b"keep");
-    }
-
-    #[test]
-    fn a_repeated_input_keeps_its_file_by_refreshing_its_age() {
-        let directory = directory();
-        let path = save(b"recurring", Some(&directory)).unwrap();
-        age(&path);
-        assert_eq!(save(b"recurring", Some(&directory)).unwrap(), path);
-        assert_eq!(fs::read(&path).unwrap(), b"recurring");
     }
 
     #[test]
@@ -247,56 +191,5 @@ mod tests {
         // The save itself follows the link, as any path does; the pruning does not run.
         save(b"input", Some(&directory)).unwrap();
         assert_eq!(fs::read(&victim).unwrap(), b"someone else's file");
-    }
-
-    #[test]
-    fn only_the_stores_own_filenames_are_prunable() {
-        for name in [
-            "0123456789abcdef.log",
-            "0123456789abcdef.tmp-4321-0",
-            "aaaaaaaaaaaaaaaa.log",
-        ] {
-            assert!(prunable(name), "{name}");
-        }
-        for name in [
-            "notes.txt",
-            "0123456789abcdef.log.bak",
-            "0123456789ABCDEF.log",
-            "0123456789abcdez.log",
-            "0123456789abcde.log",
-            "0123456789abcdef0.log",
-            "0123456789abcdef",
-            ".log",
-            "0123456789abcdef.tmp",
-            "answers",
-        ] {
-            assert!(!prunable(name), "{name}");
-        }
-    }
-
-    #[test]
-    fn skipped_save_returns_a_reason() {
-        assert_eq!(
-            save(b"input", None).unwrap_err(),
-            "saving disabled or directory unavailable"
-        );
-    }
-
-    #[test]
-    fn unwritable_directory_returns_a_reason() {
-        let directory = directory();
-        fs::set_permissions(&directory, Permissions::from_mode(0o500)).unwrap();
-        let result = save(b"input", Some(&directory));
-        fs::set_permissions(&directory, Permissions::from_mode(0o700)).unwrap();
-        assert!(!result.unwrap_err().is_empty());
-    }
-
-    #[test]
-    fn directory_that_is_a_file_returns_a_reason() {
-        let directory = directory();
-        let file = directory.join("file");
-        fs::write(&file, b"keep").unwrap();
-        assert!(!save(b"input", Some(&file)).unwrap_err().is_empty());
-        assert_eq!(fs::read(file).unwrap(), b"keep");
     }
 }

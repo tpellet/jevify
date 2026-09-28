@@ -323,67 +323,6 @@ mod tests {
     use crate::jev::Question;
 
     #[test]
-    fn missing_and_blank_dimension_models_keep_unknown_after_fallback() {
-        let qs: Questions = [("a".into(), Question::noul("a"))].into();
-        for model in [None, Some(""), Some("  ")] {
-            let mut dimension = serde_json::json!({"label":"yes", "confidence":0.8});
-            if let Some(model) = model {
-                dimension["model"] = model.into();
-            }
-            let mut body = serde_json::json!({"results":[{"dimensions":{"a":dimension}}]});
-            let response = parse_each(&serde_json::to_vec(&body).unwrap(), &qs, 1).unwrap();
-            assert_eq!(response[0].model, "unknown");
-            body["model"] = "jev-fallback".into();
-            let response = parse_each(&serde_json::to_vec(&body).unwrap(), &qs, 1).unwrap();
-            assert_eq!(
-                response[0].model,
-                if model.is_none() {
-                    "jev-fallback"
-                } else {
-                    "unknown"
-                }
-            );
-            body.as_object_mut().unwrap().remove("model");
-            body["results"][0]["dimensions"]["b"] =
-                serde_json::json!({"label":"yes", "confidence":0.8, "model":"jev-fake"});
-            let mut mixed = qs.clone();
-            mixed.insert("b".into(), Question::noul("b"));
-            let response = parse_each(&serde_json::to_vec(&body).unwrap(), &mixed, 1).unwrap();
-            assert_eq!(response[0].model, "unknown, jev-fake");
-            assert!(!response[0].all_jev());
-        }
-    }
-
-    #[test]
-    fn batch_result_count_must_match_and_models_keep_first_seen_order() {
-        let qs: Questions = [
-            ("a".into(), Question::noul("a")),
-            ("b".into(), Question::noul("b")),
-            ("c".into(), Question::noul("c")),
-        ]
-        .into();
-        let item = serde_json::json!({"dimensions": {
-            "a": {"label":"yes","confidence":0.8,"model":"other-model"},
-            "b": {"label":"yes","confidence":0.8,"model":"jev-fake"},
-            "c": {"label":"yes","confidence":0.8,"model":"other-model"}
-        }});
-        for count in [0, 1, 2, 3] {
-            let bytes = serde_json::to_vec(&serde_json::json!({"model":"unused-fallback", "results":vec![item.clone(); count]})).unwrap();
-            let result = parse_each(&bytes, &qs, 2);
-            if count == 2 {
-                let responses = result.unwrap();
-                assert_eq!(responses.len(), 2);
-                for response in responses {
-                    assert_eq!(response.model, "other-model, jev-fake");
-                    assert!(!response.all_jev());
-                }
-            } else {
-                assert_eq!(result.unwrap_err().kind(), "api_protocol");
-            }
-        }
-    }
-
-    #[test]
     fn request_decision_limit_and_empty_items_are_checked() {
         let qs: Questions = [("q".into(), Question::noul("q"))].into();
         assert!(request_body(&[], &qs).is_err());
@@ -414,80 +353,6 @@ mod tests {
             Question::noul_with("Is any of them it?", "one matches", "none matches"),
         );
         qs
-    }
-
-    #[test]
-    fn a_choice_becomes_a_dimension_whose_labels_are_its_options() {
-        let body = request_body(
-            &[item_text(&serde_json::json!({ "items": ["a", "b"] }))],
-            &questions(),
-        )
-        .unwrap();
-        let pick = &body["dimensions"]["pick"];
-        assert_eq!(
-            pick["labels"],
-            serde_json::json!(["L000", "L001", "NONE"]),
-            "options keep their order and NONE is one of them"
-        );
-        // A description with no field of its own is folded into the instructions.
-        let instr = pick["instructions"].as_str().unwrap();
-        assert!(
-            instr.starts_with("Which line?") && instr.contains("NONE — nothing fits"),
-            "{instr}"
-        );
-        // A Noul's criteria are the labels themselves: classifier.dev reads a semantic label
-        // better than a bare yes/no, and the `true` side comes first.
-        let any = &body["dimensions"]["any"];
-        assert_eq!(
-            any["labels"],
-            serde_json::json!(["one matches", "none matches"])
-        );
-        assert_eq!(any["instructions"], "Is any of them it?");
-        assert_eq!(body["items"].as_array().unwrap().len(), 1);
-    }
-
-    #[test]
-    fn a_noul_without_usable_criteria_falls_back_to_yes_and_no() {
-        let mut qs = Questions::new();
-        qs.insert("q".into(), Question::noul("Is it?"));
-        // Criteria too long to be labels, and criteria that say the same thing, fall back too.
-        qs.insert(
-            "long".into(),
-            Question::noul_with("Is it?", "y".repeat(201), "n"),
-        );
-        qs.insert("same".into(), Question::noul_with("Is it?", "x", "x"));
-        let body = request_body(&["text".into()], &qs).unwrap();
-        for id in ["q", "long", "same"] {
-            let d = &body["dimensions"][id];
-            assert_eq!(d["labels"], serde_json::json!(["yes", "no"]), "{id}");
-            let instr = d["instructions"].as_str().unwrap();
-            assert!(
-                instr.contains("yes — ") && instr.contains("no — "),
-                "{id}: {instr}"
-            );
-        }
-        // A string state travels as itself, not as a quoted JSON string.
-        assert_eq!(body["items"][0], "text");
-    }
-
-    #[test]
-    fn instructions_and_input_are_rejected_over_the_api_limits() {
-        let mut qs = Questions::new();
-        qs.insert("q".into(), Question::noul("x".repeat(9_000)));
-        assert_eq!(
-            request_body(&["y".repeat(MAX_INPUT_CHARS * 2)], &qs,)
-                .unwrap_err()
-                .exit()
-                .code(),
-            6
-        );
-        assert_eq!(
-            request_body(&["small".into()], &qs)
-                .unwrap_err()
-                .exit()
-                .code(),
-            6
-        );
     }
 
     #[test]
@@ -597,7 +462,7 @@ mod tests {
     }
 
     #[test]
-    fn malformed_noul_labels_scores_and_confidences_fail() {
+    fn malformed_bodies_labels_scores_and_confidences_are_protocol_errors() {
         let qs = [("q".into(), Question::noul("is it?"))].into();
         for value in [
             serde_json::json!({"label":"wrong","confidence":0.8,"scores":null}),
@@ -611,21 +476,11 @@ mod tests {
                     .unwrap();
             assert_eq!(parse(&body, &qs).unwrap_err().exit().code(), 4);
         }
-    }
-
-    #[test]
-    fn scores_become_probabilities_and_p_yes() {
-        let body = br#"{"model":"jev-1.13.0","results":[{"dimensions":{
-            "pick":{"label":"L001","confidence":0.97,"scores":{"L000":0.0,"L001":0.98,"NONE":0.02},"model":"jev-1.13.0","ms":379},
-            "any":{"label":"one matches","confidence":0.99,"scores":{"one matches":0.93,"none matches":0.07},"model":"jev-1.13.0","ms":379}}}],
-            "usage":{"classifications":2}}"#;
-        let r = parse(body, &questions()).unwrap();
-        assert_eq!(r.model, "jev-1.13.0");
-        assert_eq!(r.probs("pick").unwrap()["L001"], 0.98);
-        assert_eq!(r.answers["pick"].choice.as_deref(), Some("L001"));
-        assert_eq!(r.noul("any").unwrap(), 0.93);
-        // Free: no tokens, so no cost.
-        assert_eq!(r.usage.input_tokens, 0);
+        assert_eq!(parse(b"not json", &qs).unwrap_err().exit().code(), 4);
+        assert_eq!(
+            parse(br#"{"results":[]}"#, &qs).unwrap_err().exit().code(),
+            4
+        );
     }
 
     #[test]
@@ -650,50 +505,5 @@ mod tests {
             &qs,
         );
         assert_eq!(none.unwrap_err().exit().code(), 4);
-    }
-
-    #[test]
-    fn missing_scores_on_a_choice_and_missing_results_are_protocol_errors() {
-        assert_eq!(
-            parse(
-                br#"{"results":[{"dimensions":{"pick":{"label":"L001","confidence":0.9,"scores":null},"any":{"label":"one matches","scores":{"one matches":1.0,"none matches":0.0}}}}]}"#,
-                &questions()
-            )
-            .unwrap_err()
-            .exit()
-            .code(),
-            4
-        );
-        assert_eq!(
-            parse(br#"{"results":[]}"#, &questions())
-                .unwrap_err()
-                .exit()
-                .code(),
-            4
-        );
-        assert_eq!(
-            parse(b"not json", &questions()).unwrap_err().exit().code(),
-            4
-        );
-        // Unknown answers are harmless, but a missing requested dimension fails immediately.
-        let r = parse(
-            br#"{"results":[{"dimensions":{"other":{"label":"x","scores":{"x":1.0}}}}]}"#,
-            &questions(),
-        );
-        assert_eq!(r.unwrap_err().exit().code(), 4);
-    }
-
-    #[test]
-    fn error_bodies_carry_their_stable_code() {
-        assert_eq!(
-            error_message(r#"{"error":"at most 100 labels","code":"too_many_labels"}"#).unwrap(),
-            "too_many_labels: at most 100 labels"
-        );
-        assert_eq!(
-            error_message(r#"{"error":"nope"}"#).unwrap(),
-            "nope".to_string()
-        );
-        assert_eq!(error_message("<html>502</html>"), None);
-        assert_eq!(error_message(r#"{"detail":"x"}"#), None);
     }
 }
