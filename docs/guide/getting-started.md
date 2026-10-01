@@ -19,8 +19,9 @@ Build from `main` with `cargo install --git https://github.com/tpellet/jevify --
 ## No key needed
 
 Without a key, jevify asks [classifier.dev](https://classifier.dev), which serves Jev free and
-without an account: $0.50 per IP per UTC day, subject to $100 per day across everyone and
-four concurrent requests. A TypeSafe key uses your own credits:
+without an account: $0.50 per IP per UTC day, shared by everyone behind that IP, subject to
+$100 per day across everyone and four concurrent requests. The free tier is for trying jevify;
+CI and sustained or team use need a TypeSafe key, which uses your own credits:
 
 ```sh
 export TYPESAFE_API_KEY_FILE=/path/to/key

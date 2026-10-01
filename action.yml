@@ -30,7 +30,7 @@ inputs:
     description: Path to a file holding the failed step's output, stdout and stderr (`2>&1 | tee build.log`).
     required: true
   typesafe-api-key:
-    description: TypeSafe API key. Without it jevify uses the keyless classifier.dev backend.
+    description: TypeSafe API key, recommended for CI. Without it jevify uses the free keyless classifier.dev tier ($0.50 per IP per UTC day, shared by everyone behind that IP), which is meant for trying jevify.
     required: false
     default: ""
 runs:

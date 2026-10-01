@@ -16,8 +16,9 @@ curl --proto '=https' --tlsv1.2 -LsSf https://github.com/tpellet/jevify/releases
 Or with Rust 1.87 or later: `cargo install jevify --locked`.
 
 No key or account needed. [classifier.dev](https://classifier.dev) provides a free budget of
-$0.50 per IP per UTC day, subject to $100 per day across everyone and four concurrent requests.
-Exhaustion is `quota_exhausted` (exit 4), not an invitation to retry. To use your TypeSafe
+$0.50 per IP per UTC day, shared by everyone behind that IP, subject to $100 per day across
+everyone and four concurrent requests. It is for trying jevify; CI and sustained or team use need
+a TypeSafe key. Exhaustion is `quota_exhausted` (exit 4), not an invitation to retry. To use your TypeSafe
 credits, set `TYPESAFE_API_KEY_FILE=/path/to/key`. `jevify health` checks the backend.
 
 ## Why did it fail?
