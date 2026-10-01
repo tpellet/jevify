@@ -709,6 +709,13 @@ fn spending_error(backend: Backend, body: &[u8]) -> Option<JevifyError> {
         .collect::<Vec<_>>()
         .join(" ")
         .to_ascii_lowercase();
+    // classifier.dev caps a keyless request at $0.01, or at what is left of the IP's daily
+    // budget when that is less: a `limitUsd` below $0.01 means the budget, not the request.
+    let budget_capped = parts.iter().any(|part| {
+        part["limitUsd"]
+            .as_f64()
+            .is_some_and(|limit| limit < 0.01 - 1e-9)
+    });
     match backend {
         Backend::Typesafe
             if has_code("billing_error")
@@ -721,6 +728,7 @@ fn spending_error(backend: Backend, body: &[u8]) -> Option<JevifyError> {
         }
         Backend::Classifier
             if has_code("free_ip_daily_budget")
+                || (has_code("request_spending_limit") && budget_capped)
                 || (message.contains("budget")
                     && (message.contains("daily")
                         || message.contains("per day")

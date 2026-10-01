@@ -364,6 +364,27 @@ async fn spending_errors_distinguish_quota_from_request_size_without_retries() {
             "00:00 UTC",
             "$0.50",
         ),
+        // classifier.dev's 402 for a one-item request once the per-IP daily budget is spent:
+        // the allowance shrinks below $0.01 to what is left of the budget.
+        (
+            Classifier,
+            402,
+            json!({"error":"This request cannot fit another provider attempt within its allowance.","code":"request_spending_limit","retryable":false,"action":"Split the batch, shorten input text, labels or instructions, or use a funded workspace API key. Repeating the same request will not increase its allowance.","docs":"https://classifier.dev/developers","limitUsd":0.002317361,"spentOrReservedUsd":0,"requiredAttemptUsd":0.002752512}),
+            "quota_exhausted",
+            4,
+            "00:00 UTC",
+            "$0.50",
+        ),
+        // classifier.dev's 402 for a request too costly for the full $0.01 allowance.
+        (
+            Classifier,
+            402,
+            json!({"error":"This request cannot fit another provider attempt within its allowance.","code":"request_spending_limit","retryable":false,"action":"Split the batch, shorten input text, labels or instructions, or use a funded workspace API key. Repeating the same request will not increase its allowance.","docs":"https://classifier.dev/developers","limitUsd":0.01,"spentOrReservedUsd":0.008368674,"requiredAttemptUsd":0.002752512}),
+            "input_too_large",
+            6,
+            "$0.01",
+            "filter the input",
+        ),
         (
             Classifier,
             402,
