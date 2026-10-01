@@ -8,7 +8,7 @@
   "plugins": [
     {
       "name": "jevify",
-      "description": "Teaches agents to use the jevify CLI: fill, pick --from, why, pick, filter, is, route, add, sort.",
+      "description": "Teaches agents to use the jevify CLI: fill, pick (and pick --from), why, filter, label, is, add, capabilities, health, init.",
       "source": "./plugins/jevify"
     }
   ]

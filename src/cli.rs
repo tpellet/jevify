@@ -48,25 +48,34 @@ impl GlobalOpts {
 pub enum Cmd {
     /// Resolve marked arguments and become the command; --dry-run prints it
     Fill {
+        /// Print the filled command instead of running it
         #[arg(long)]
         dry_run: bool,
+        /// Omit status lines and hints on stderr; abstentions are still reported
         #[arg(short = 'q')]
         quiet: bool,
+        /// Read @{-:...} candidates from FILE instead of stdin
         #[arg(long, value_name = "FILE")]
         candidates: Option<std::path::PathBuf>,
+        /// Read @{one:...} and @{flag:...} context from FILE instead of stdin
         #[arg(long, value_name = "FILE")]
         context: Option<std::path::PathBuf>,
+        /// Use the Nth whitespace field (1-based) of each candidate as the handle
         #[arg(long, conflicts_with = "key")]
         field: Option<usize>,
+        /// Read candidates as JSON and use this key's value as the handle
         #[arg(long)]
         key: Option<String>,
+        /// Split candidates on NUL bytes
         #[arg(short = '0', conflicts_with = "para")]
         nul: bool,
+        /// Split candidates into paragraphs
         #[arg(long)]
         para: bool,
         /// Run as if started in DIR: listers, excerpts and the command
         #[arg(short = 'C', long = "repo", value_name = "DIR")]
         repo: Option<std::path::PathBuf>,
+        /// The command after --, with @{kind:description} markers to fill
         #[arg(last = true, required = true)]
         cmd: Vec<std::ffi::OsString>,
     },
