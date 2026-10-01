@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+## 0.14.2 - 2026-10-01
+
+Fixed:
+
+- A spent classifier.dev per-IP daily budget reports `quota_exhausted` (exit 4). classifier.dev
+  answers it with `request_spending_limit` and a `limitUsd` below $0.01; jevify reported
+  `input_too_large` (exit 6).
+
+Changed:
+
+- Every flag of `fill`, `filter` and `init` has help text. The plugin listing names the current
+  verbs.
+- The README, the getting-started guide and the GitHub Action say the keyless tier is for trying
+  jevify; CI and team use need a TypeSafe key.
+- The end-to-end gate reports passes, named known misses and failures apart, and a TypeSafe run
+  without a key fails instead of passing.
+
+Measured:
+
+- On 2026-10-01 with TypeSafe: 330 uncached runs, slowest 0.81 s (`benchmarks/latency.md`);
+  `fill` on 20 agent requests, 17 hits, 2 abstentions, 0 wrong (`benchmarks/fill-sample.md`);
+  `is` as a claim checker on 20 real logs, 20 of 20, no false "supports"
+  (`benchmarks/claim-check.md`).
+
 ## 0.14.1 - 2026-09-28
 
 Changed:
