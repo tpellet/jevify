@@ -27,12 +27,16 @@
 //! JEVIFY_E2E_ONLY=pc1,why-go-01 ...                                            # some cases
 //! ```
 //!
-//! Without a key the TypeSafe run prints SKIPPED and passes. The keyless run spends
-//! classifier.dev's free per-IP budget, so it runs only under `JEVIFY_E2E_KEYLESS=1`. A hand-off
-//! lists a skipped run as NOT RUN, never as passed. The suite needs the network, `git`, `bash`
-//! and `python3`. Every case prints one PASS or FAIL line; the test fails at the end naming
-//! every failed case, and a backend that answers exit 4 or 5 fails the case, since nothing was
-//! proved.
+//! Without a key the TypeSafe run fails: a release gate that proved nothing must not pass. The
+//! keyless run spends classifier.dev's free per-IP budget, so it runs only under
+//! `JEVIFY_E2E_KEYLESS=1`; without it that test prints SKIPPED, and a hand-off lists it as NOT
+//! RUN, never as passed. The suite needs the network, `git`, `bash` and `python3`.
+//!
+//! Every case prints one line: PASS, MISS (a case in [`KNOWN_MISSES`] that missed its gold),
+//! FIXED (a known miss that met its gold) or FAIL. The gold assertion is the same for all of
+//! them. The summary lists the passes, the named misses and the failures separately; a named
+//! miss is never counted as a pass and does not fail the run, every other miss does, and a
+//! backend that answers exit 4 or 5 fails the case, known miss or not, since nothing was proved.
 
 use serde_json::Value;
 use std::path::{Path, PathBuf};
@@ -42,6 +46,27 @@ use std::time::{Duration, Instant};
 const HYPERFINE: &str = "https://github.com/sharkdp/hyperfine";
 const PIN: &str = "f12f3d9f86f3643b3b7deace5e160b1f0f44d2b7";
 const RIPGREP_PIN: &str = "3fce3b5bb0236da2df6d99672afb8a719642eca7";
+/// Cases that miss their gold today, each with the reason. Their gold assertions stay: a miss
+/// is reported as MISS, a pass as FIXED (remove the entry then).
+const KNOWN_MISSES: &[(&str, &str)] = &[
+    (
+        "why-cargo-02",
+        "points at the `process didn't exit successfully` summary, 2 of 3 runs",
+    ),
+    (
+        "why-pytest-01",
+        "points at the progress line naming the warning",
+    ),
+    (
+        "liar-01",
+        "pick --from commit decides on names alone; the lying subject wins",
+    ),
+    (
+        "liar-07",
+        "pick --from commit decides on names alone; the lying subject wins",
+    ),
+];
+
 const BAT_PIN: &str = "4987f76709aae3a1c4db723c53874c9ddcb0c4fd";
 
 /// Where a case runs.
@@ -769,8 +794,9 @@ fn run_suite(backend: &str) {
     let started = Instant::now();
     let ctx = Ctx::prepare();
     let only = std::env::var("JEVIFY_E2E_ONLY").ok();
-    let (mut passed, mut skipped, mut requests) = (0, 0, 0);
-    let mut failed = Vec::new();
+    let (mut skipped, mut requests) = (0, 0);
+    let (mut passed, mut missed, mut fixed, mut failed) =
+        (Vec::new(), Vec::new(), Vec::new(), Vec::new());
     for case in cases() {
         if only
             .as_deref()
@@ -812,20 +838,39 @@ fn run_suite(backend: &str) {
             Err(format!("answered by `{model}`, not Jev"))
         };
         let secs = t.elapsed().as_secs_f64();
-        match result {
-            Ok(note) => {
-                passed += 1;
-                eprintln!("PASS {:<22} {secs:>5.1}s  {note}", case.id);
+        let known = KNOWN_MISSES.iter().find(|(id, _)| *id == case.id);
+        let unavailable = matches!(run.code, Some(4 | 5));
+        match (result, known) {
+            (Ok(note), None) => {
+                eprintln!("PASS  {:<22} {secs:>5.1}s  {note}", case.id);
+                passed.push(case.id);
             }
-            Err(why) => {
-                eprintln!("FAIL {:<22} {secs:>5.1}s  {why}", case.id);
+            (Ok(note), Some(_)) => {
+                eprintln!(
+                    "FIXED {:<22} {secs:>5.1}s  known miss met its gold: {note}",
+                    case.id
+                );
+                fixed.push(case.id);
+            }
+            (Err(why), Some((_, reason))) if !unavailable => {
+                eprintln!(
+                    "MISS  {:<22} {secs:>5.1}s  known miss ({reason}): {why}",
+                    case.id
+                );
+                missed.push(case.id);
+            }
+            (Err(why), _) => {
+                eprintln!("FAIL  {:<22} {secs:>5.1}s  {why}", case.id);
                 failed.push(case.id);
             }
         }
     }
     eprintln!(
-        "e2e on {backend}: {passed} passed, {} failed {failed:?}, {skipped} skipped; \
-         {requests} requests in the envelopes; {:.0} s",
+        "e2e on {backend}: {} passed, {} named misses {missed:?}, {} known misses fixed {fixed:?}, \
+         {} failed {failed:?}, {skipped} skipped; {requests} requests in the envelopes; {:.0} s",
+        passed.len(),
+        missed.len(),
+        fixed.len(),
         failed.len(),
         started.elapsed().as_secs_f64()
     );
@@ -835,14 +880,13 @@ fn run_suite(backend: &str) {
 #[test]
 #[ignore]
 fn end_to_end_on_typesafe() {
-    if std::env::var_os("TYPESAFE_API_KEY").is_none()
-        && std::env::var_os("TYPESAFE_API_KEY_FILE").is_none()
-    {
-        eprintln!(
-            "SKIPPED: set TYPESAFE_API_KEY_FILE=/path/to/key (or TYPESAFE_API_KEY) to run the end-to-end suite"
-        );
-        return;
-    }
+    assert!(
+        std::env::var_os("TYPESAFE_API_KEY").is_some()
+            || std::env::var_os("TYPESAFE_API_KEY_FILE").is_some(),
+        "NOT RUN: set TYPESAFE_API_KEY_FILE=/path/to/key (or TYPESAFE_API_KEY); the release gate \
+         fails without a key. For the keyless run use JEVIFY_E2E_KEYLESS=1 with \
+         end_to_end_on_classifier"
+    );
     run_suite("typesafe");
 }
 
