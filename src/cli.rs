@@ -132,18 +132,25 @@ pub enum Cmd {
         /// What must be true of a kept record; unquoted words are joined
         #[arg(required = true, num_args = 1.., value_name = "STATEMENT")]
         statement: Vec<String>,
+        /// Keep the records that do not satisfy the statement
         #[arg(short = 'v')]
         invert: bool,
+        /// Print the number of kept records instead of the records
         #[arg(short = 'c')]
         count: bool,
+        /// Drop unsure records instead of keeping them
         #[arg(long)]
         strict: bool,
+        /// Split stdin on NUL bytes
         #[arg(short = '0', conflicts_with = "para")]
         nul: bool,
+        /// Split stdin into paragraphs
         #[arg(long)]
         para: bool,
+        /// Read paths from stdin and use file excerpts as evidence
         #[arg(long)]
         files: bool,
+        /// Do not save the full input
         #[arg(long)]
         no_save: bool,
     },
@@ -200,7 +207,10 @@ pub enum Cmd {
     /// Check which backend answers, whether a key is needed, and how fast it replies
     Health,
     /// Print an agent instruction block
-    Init { shell: Shell },
+    Init {
+        /// The block to print; agents prints instructions for coding agents
+        shell: Shell,
+    },
 }
 
 /// A free-text argument as the caller wrote it, quoted as one word or left as several: the
