@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+## 0.15.0 - 2026-10-02
+
+Added:
+
+- `jevify mcp`: a stdio MCP server with the tools `why`, `is` and `pick` (select only), for Claude
+  Code, Codex and Claude Desktop (`packaging/mcpb/manifest.json`). An abstention is a result with
+  `data.shortlist`, not an error.
+- `why --hook claude|codex [--min-lines N]` reads the agent's tool-failure payload and prints the
+  hook JSON itself; the plugin hook no longer needs `jq`. A hook run always exits 0.
+- The GitHub Action's `classes:` input names the kind of failure next to the line.
+- `jevify init agents` and the plugin skill carry the "run the test you mean" recipe for cargo
+  and pytest.
+- Every `quota_exhausted`, missing-key and bad-key hint, `health` (`data.key_url`) and the
+  Action's exit-4 summary point at https://console.typesafe.ai/keys.
+
+Changed:
+
+- `label` is `filter --label A,B,C`. The `label` verb is removed.
+- `fill` lists `data.shortlist` (and `markers[].shortlist`) on every exit 3; the list is empty,
+  never null, when nothing was scored.
+- The README leads with `why` and the test recipe; `add` moves to "Other verbs".
+
+Measured:
+
+- On TypeSafe, 2026-10-01 and 2026-10-02: failure class on 34 real CI runs, 26 right, 4 abstain,
+  4 wrong (`benchmarks/why-triage.md`); a test chosen by behaviour, 43 of 45, 5 of 5 "none fits"
+  abstained, 0 wrong (`benchmarks/test-by-behaviour.md`).
+
 ## 0.14.2 - 2026-10-01
 
 Fixed:
