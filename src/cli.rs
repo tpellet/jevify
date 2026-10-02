@@ -143,7 +143,7 @@ pub enum Cmd {
         /// What must be true of a kept record; unquoted words are joined. Omitted with --label
         #[arg(required_unless_present = "label", num_args = 1.., value_name = "STATEMENT")]
         statement: Vec<String>,
-        /// Tag each record with one of these labels instead: LABEL<TAB>RECORD, ? when unsure
+        /// Tag each record with one of these labels instead: the label, a tab, the record; ? when unsure
         #[arg(
             long,
             value_name = "A,B,C",
