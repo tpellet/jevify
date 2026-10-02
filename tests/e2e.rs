@@ -107,7 +107,8 @@ enum Expect {
     /// Exit 0 and `why`'s first cause between the first line holding the first text and the
     /// next line holding the second, both included.
     CauseBetween(&'static str, &'static str),
-    /// Exit 0 and the record starting with each text carries that label; `!x` is any label but x.
+    /// Exit 0 and, under `filter --label`, the record starting with each text carries that
+    /// label; `!x` is any label but x.
     Labels(&'static [(&'static str, &'static str)]),
     /// Exit 1: `is` answers no, `filter` keeps nothing.
     No,
@@ -263,20 +264,20 @@ fn cases() -> Vec<Case> {
         c("filter-none", Data, File("tickets.txt"), &["filter", "--json", "--strict", "reports a security vulnerability"], No),
         c("filter-crashes", Repo, TITLES, &["filter", "--json", "reports a crash or a hang"], Crashes),
 
-        // label: one tag per record.
-        c("lb1", Data, File("tickets.txt"), &["label", "--json", "bug,feature,question"], Labels(&[
+        // filter --label: one tag per record.
+        c("lb1", Data, File("tickets.txt"), &["filter", "--json", "--label", "bug,feature,question"], Labels(&[
             ("#101 ", "bug"), ("#105 ", "bug"), ("#109 ", "bug"), ("#102 ", "feature"), ("#107 ", "feature"),
             ("#111 ", "feature"), ("#104 ", "question"), ("#108 ", "question"), ("#112 ", "question")])),
-        c("lb4", Data, File("events.log"), &["label", "--json", "outage,degraded,normal"], Labels(&[
+        c("lb4", Data, File("events.log"), &["filter", "--json", "--label", "outage,degraded,normal"], Labels(&[
             ("09:14:03", "outage"), ("09:20:44", "outage"), ("09:40:02", "outage"), ("09:00:01", "!outage"),
             ("09:05:12", "!outage"), ("09:11:40", "!outage"), ("09:15:30", "!outage"), ("09:22:10", "!outage"),
             ("09:30:00", "!outage"), ("09:31:17", "!outage"), ("09:45:55", "!outage"), ("09:50:21", "!outage")])),
-        c("lb3", Hyperfine, SCRIPTS, &["label", "--json", "--files", "plotting,statistics"], Labels(&[
+        c("lb3", Hyperfine, SCRIPTS, &["filter", "--json", "--files", "--label", "plotting,statistics"], Labels(&[
             ("scripts/advanced_statistics.py", "statistics"), ("scripts/welch_ttest.py", "statistics"),
             ("scripts/plot_benchmark_comparison.py", "plotting"), ("scripts/plot_histogram.py", "plotting"),
             ("scripts/plot_parametrized.py", "plotting"), ("scripts/plot_progression.py", "plotting"),
             ("scripts/plot_whisker.py", "plotting")])),
-        c("label-titles", Repo, TITLES, &["label", "--json", "bug,feature,docs,question"], Titles),
+        c("label-titles", Repo, TITLES, &["filter", "--json", "--label", "bug,feature,docs,question"], Titles),
 
         // is: a fact about one context, yes, no or unsure.
         c("is1", Data, Empty, &["is", "--json", "--context", "mail_cancel.txt", "the customer wants to end their subscription"],
@@ -539,8 +540,8 @@ fn chosen(verb: &str, run: &Run) -> Result<Vec<(String, Option<f64>)>, String> {
         "why" => list("causes", "line"),
         "pick" => list("matches", "text"),
         "fill" => list("markers", "handle"),
+        "filter" if data.get("labelled").is_some() => list("records", "label"),
         "filter" => list("records", "text"),
-        "label" => list("records", "label"),
         // --dry-run stages nothing; the hunks at or above the threshold are the ones --yes stages.
         "add" => {
             let threshold = run.envelope["meta"]["threshold"].as_f64().unwrap_or(1.0);

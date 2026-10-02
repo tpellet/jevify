@@ -90,9 +90,9 @@ so `2 unsure` is the warning that the question did not reach two of the records.
 Put a bucket in front of each line, then count the buckets with `cut`, `sort` and `uniq`:
 
 ```console
-$ jevify label bug,feature,question < docs/demo/issues.txt | cut -f1 | sort | uniq -c
-jevify label: 10 records, 10 distinct, 1 requests
-jevify label: labelled 10 of 10, 0 unsure
+$ jevify filter --label bug,feature,question < docs/demo/issues.txt | cut -f1 | sort | uniq -c
+jevify filter: 10 records, 10 distinct, 1 requests
+jevify filter: labelled 10 of 10, 0 unsure
    4 bug
    3 feature
    3 question

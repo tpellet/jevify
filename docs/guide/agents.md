@@ -23,7 +23,7 @@ interface. The [robot contract](../ROBOT_MODE.md) defines fields, telemetry and 
 | Installed tool by task | `jevify pick --from tool 'render a terminal demo from a tape file'` |
 | Only the handle | `jevify pick --from pr 'the Windows path fix'` |
 | Relevant records | `gh issue list \| jevify filter 'reports a crash'` |
-| Labels for many records | `gh issue list \| jevify label bug,feature,question` |
+| Labels for many records | `gh issue list \| jevify filter --label bug,feature,question` |
 | Predicate for the next action | `jevify is 'asks for a refund' --context mail.txt` |
 
 ## Machine output

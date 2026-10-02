@@ -49,7 +49,7 @@ The `tool` kind adds finalist man-page evidence to PATH names and summaries.
 omissions; unordered overflow is exit 6. Lister failure or timeout never yields a partial list.
 [Kind rules](kinds.md) describe the evidence and execution boundaries.
 
-`filter` and `label` batch up to 60 records on classifier.dev, each judged alone. On TypeSafe,
+`filter` batches up to 60 records on classifier.dev, each judged alone. On TypeSafe,
 20 records share one state, with each question naming its record; independence is not claimed.
 Answers flow in input order. A late failure can leave a prefix on human stdout.
 

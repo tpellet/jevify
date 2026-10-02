@@ -39,8 +39,7 @@ pub fn capabilities() -> Outcome {
             {"name":"fill", "usage":"jevify fill [--dry-run] [-q] [-C DIR] [--candidates FILE] [--context FILE] [--field N | --key KEY] [-0 | --para] -- COMMAND ARGS...", "exit":[0,2,3,4,5,6], "data":"argv, markers, reason; exec mode has no envelope", "example":"jevify fill --dry-run -- git switch '@{branch:the auth refactor}'"},
             {"name":"pick", "usage":"jevify pick <intent...> [-n N] [--index | --files | --from KIND] [-0 | --para] [-C DIR]", "exit":[0,3], "data":"matches[{text,ordinal,p}], any, source; shortlist on abstention", "example":"jevify pick --from tool 'keep my mac awake'"},
             {"name":"why", "usage":"CMD 2>&1 | jevify why [-C N] [-n N] [--no-save]", "exit":[0,3], "data":"causes, any, considered, total, saved_input, complete", "example":"gh run view --log-failed | jevify why"},
-            {"name":"filter", "usage":"LIST | jevify filter [-v] [-c] [--strict] [-0 | --para] [--files] [--no-save] <statement...>", "exit":[0,1,3], "data":"records, kept, total, unsure, complete, saved_input, excerpts_withheld"},
-            {"name":"label", "usage":"LIST | jevify label a,b,c [-0 | --para] [--files]", "exit":[0,3], "data":"records, labelled, total, unsure, complete, excerpts_withheld"},
+            {"name":"filter", "usage":"LIST | jevify filter [-v] [-c] [--strict] [-0 | --para] [--files] [--no-save] <statement...>", "exit":[0,1,3], "data":"records, kept, total, unsure, complete, saved_input, excerpts_withheld; with --label a,b,c (no statement, -v, -c or --strict): LABEL<TAB>RECORD per record, ? when unsure, exit 0 or 3, data records[{label,...}], labelled, total, unsure, complete, excerpts_withheld", "example":"gh issue list | jevify filter --label bug,feature,question"},
             {"name":"is", "usage":"jevify is <statement>... [--context FILE] [--band 0.15]", "exit":[0,1,3], "data":"p, verdict, truncated; statements for multiple questions"},
             {"name":"add", "usage":"jevify add [--dry-run | --yes] <topic...>", "exit":[0,2,3,6,130], "data":"hunks[{file,header,p,staged}]"},
             {"name":"capabilities", "usage":"jevify capabilities --json", "exit":[0], "data":"commands, kinds, exit_codes, error_kinds, env, envelope"},
@@ -152,7 +151,7 @@ pub fn init(_shell: Shell) -> Outcome {
          cargo test -- --list 2>/dev/null | sed -n 's/: test$//p' | jevify fill -- cargo test '@{-:what the test checks}' -- --exact\n\
          pytest --collect-only -q | sed -n '/::/p' | jevify fill -- pytest '@{-:what the test checks}'\n\
          cat records.txt | jevify filter 'reports a failed assertion'\n\
-         cat records.txt | jevify label bug,feature,question\n\
+         cat records.txt | jevify filter --label bug,feature,question\n\
          jevify is 'reports a failure' < build.log\n\
          Single-quote whole markers. Never eval a preview. Omit --dry-run only with authorization.\n\
          fill stdin has one role; separate --candidates and --context. An unsure flag runs nothing.\n\

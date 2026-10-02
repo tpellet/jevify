@@ -109,6 +109,7 @@ Data: `causes[{line,text,p,context[]}]`, `shortlist`, `any`, `considered`, `tota
 ```sh
 gh issue list | jevify filter 'reports a crash'
 fd -0 -e rs | jevify filter -0 --files 'tests backend throttling'
+gh issue list | jevify filter --label bug,feature,question | cut -f1 | sort | uniq -c
 ```
 
 `filter '<statement>' [-v] [-c] [--strict] [-0 | --para] [--files] [--no-save]`
@@ -121,15 +122,10 @@ Data: `records[{text,ordinal,p,verdict,lossy?,unreadable?}]`, `kept`, `total`, `
 unsure. A later backend failure can leave a prefix on human stdout; check the exit code.
 Raw input is saved unless `--no-save` or `JEVIFY_NO_SAVE=1` is set.
 
-## label
-
-```sh
-gh issue list | jevify label bug,feature,question | cut -f1 | sort | uniq -c
-```
-
-`label a,b,c [-0 | --para] [--files]` prints `LABEL<TAB>RECORD` in input order, `?` when
-unsure. Supply at least two distinct, nonempty labels, none `?` or `NONE`; the maximum is
-99 keyless or 200 on TypeSafe. Invalid labels exit 2. Input is not saved.
+`filter --label a,b,c [-0 | --para] [--files]` takes no statement and tags every record
+instead: `LABEL<TAB>RECORD` in input order, `?` when unsure. Supply at least two distinct,
+nonempty labels, none `?` or `NONE`; the maximum is 99 keyless or 200 on TypeSafe. Invalid
+labels, or `-v`, `-c` or `--strict` next to `--label`, exit 2. Input is not saved.
 
 Data: `records[{label,text,ordinal,p,lossy?,unreadable?}]`, `labelled`, `total`, `unsure`,
 `complete`, `excerpts_withheld`. Exit 0 labelled, 3 every record unsure, plus common errors.
@@ -162,11 +158,11 @@ Data: `hunks[{file,header,p,staged}]`. Exit 0 scored or staged, 3 no match, plus
 
 ## Records and utilities
 
-`pick`, `filter` and `label` read lines, paragraphs with `--para`, or NUL records with `-0`.
-The split flags conflict. `pick` and `filter` preserve selected record bytes and input order;
-`label` preserves bytes after the tab. Machine text with invalid UTF-8 has `lossy: true`.
-`--files` withholds hidden, secret-looking and symlink excerpts; unreadable files stay unsure
-in `filter` and `label`. See [Privacy](../../PRIVACY.md).
+`pick` and `filter` read lines, paragraphs with `--para`, or NUL records with `-0`. The
+split flags conflict. `pick` and `filter` preserve selected record bytes and input order;
+`filter --label` preserves bytes after the tab. Machine text with invalid UTF-8 has
+`lossy: true`. `--files` withholds hidden, secret-looking and symlink excerpts; unreadable
+files stay unsure in `filter`. See [Privacy](../../PRIVACY.md).
 
 | Command | Data | Exit |
 |:---|:---|:---|

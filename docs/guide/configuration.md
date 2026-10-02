@@ -73,7 +73,7 @@ longer waits. Expiry of the overall deadline is `api_deadline` (exit 4).
 
 ## Limits
 
-Stdin is bounded at 64 MiB. `pick`, `filter` and `label` accept at most 20,000 distinct records;
+Stdin is bounded at 64 MiB. `pick` and `filter` accept at most 20,000 distinct records;
 this is an input ceiling, not a daily quota. Selection also has to fit two rounds:
 `pick` and `pick --from` accept 9,801 candidates keyless and 20,000 on TypeSafe;
 `fill` accepts 3,267 and 13,200 per marker. Ordered kinds report any omitted older candidates;

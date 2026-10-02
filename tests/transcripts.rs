@@ -150,8 +150,8 @@ fn transcripts() -> Vec<Transcript> {
         // The same call through `cut | sort | uniq -c`: the counts the page prints are these
         // ten labels counted, so the labels are the expectation and the counts follow.
         Transcript {
-            shown: "jevify label bug,feature,question < docs/demo/issues.txt | cut -f1 | sort | uniq -c",
-            argv: &["label", "bug,feature,question"],
+            shown: "jevify filter --label bug,feature,question < docs/demo/issues.txt | cut -f1 | sort | uniq -c",
+            argv: &["filter", "--label", "bug,feature,question"],
             stdin: Stdin::File("docs/demo/issues.txt"),
             expect: Expect::Chose(&[
                 "bug", "feature", "question", "bug", "feature", "question", "bug", "feature",
@@ -238,7 +238,8 @@ fn listing(argv: &[&str]) -> String {
 }
 
 /// The items the run chose, in the order the page prints them: the picked lines, the kept
-/// records, the label of each record, the handle of each marker, the verdict of `is`.
+/// records, the label of each record under `--label`, the handle of each marker, the verdict
+/// of `is`.
 fn chosen(verb: &str, data: &Value) -> Vec<String> {
     let texts = |key: &str, field: &str| -> Vec<String> {
         data[key]
@@ -256,8 +257,9 @@ fn chosen(verb: &str, data: &Value) -> Vec<String> {
     match verb {
         "why" => texts("causes", "text"),
         "pick" => texts("matches", "text"),
+        // `filter --label` answers with `labelled`, and its chosen items are the labels.
+        "filter" if data.get("labelled").is_some() => texts("records", "label"),
         "filter" => texts("records", "text"),
-        "label" => texts("records", "label"),
         "fill" => texts("markers", "handle"),
         "is" => data["verdict"]
             .as_str()

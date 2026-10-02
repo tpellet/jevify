@@ -5,7 +5,6 @@ pub mod agent;
 pub mod fill;
 pub mod filter;
 pub mod is;
-pub mod label;
 pub mod mcp;
 pub mod pick;
 pub mod why;

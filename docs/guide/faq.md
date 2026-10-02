@@ -32,16 +32,16 @@ abstain instead of selecting. `fill` runs nothing if any marker abstains. Its re
 `no_match`, `ambiguous`, `unsure_flag` and `insufficient_evidence`; machine output has
 `error: null` and the reason in `data`. A shortlist contains alternatives, not selected handles.
 
-`filter` keeps unsure records unless `--strict`; `label` marks them `?`. Both exit 3 when all
-records are unsure. `is` exits 3 when no statement is no and at least one is unsure, or the
+`filter` keeps unsure records unless `--strict`; `filter --label` marks them `?`. Both exit 3
+when all records are unsure. `is` exits 3 when no statement is no and at least one is unsure, or the
 context is oversized. Write conditions so yes means act: `&&` acts only on 0.
 
 ## Why do hidden files still appear?
 
 A hidden or secret-looking path can remain a candidate, but its excerpt is withheld before
 reading. The name can still reach the backend. Symlink files also receive no excerpt.
-`excerpts withheld: N` includes unreadable files; `filter` and `label` leave those unsure
-instead of judging the filename. This is not a guarantee that all secrets are detected.
+`excerpts withheld: N` includes unreadable files; `filter` leaves those unsure instead of
+judging the filename. This is not a guarantee that all secrets are detected.
 
 ## Does it run a command or invent arguments?
 

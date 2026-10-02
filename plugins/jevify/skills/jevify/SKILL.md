@@ -40,17 +40,16 @@ only to choose from it by eye.
 | A failed build has more than about 50 lines, or grep finds only the symptom | `cargo test 2>&1 \| jevify why` | A cause with line number and context; read that, not the whole log |
 | Many records, one question | `gh issue list \| jevify filter 'reports a crash'` | Matching and unsure records, like `grep` by meaning |
 | Many files, one question | `fd -0 -e rs \| jevify filter -0 --files 'tests backend throttling'` | Paths judged by file content |
-| Every record or file needs a bucket | `ls reports/*.md \| jevify label --files bug,feature,docs` | Each record with its label, `?` when unsure; one call, not one read per file |
+| Every record or file needs a bucket | `ls reports/*.md \| jevify filter --files --label bug,feature,docs` | Each record with its label, `?` when unsure; one call, not one read per file |
 | One record or file out of many, described rather than named | `git ls-files \| jevify pick --files 'guards downloads against internal addresses'` | A selected input record, or abstention |
 | The next step depends on a fact | `cargo test 2>&1 \| jevify is 'every failure is a network timeout' && cargo test` | An exit code, like `test` |
 | An unfamiliar task in the long tail of a large PATH | `jevify pick --from tool 'render a terminal demo from a tape file'` | An installed tool; nothing executes |
-| Requested staging of one topic | `jevify add --dry-run 'the token expiry fix'` | Scores or stages individual hunks |
 
 ```sh
 cargo build 2>&1 | jevify why
 gh issue list | jevify filter 'reports a crash'
 fd -0 | jevify filter -0 --files 'a test fixture'
-gh issue list | jevify label bug,feature,question | cut -f1 | sort | uniq -c
+gh issue list | jevify filter --label bug,feature,question | cut -f1 | sort | uniq -c
 git ls-files | jevify pick --files 'where retries back off'
 git log --oneline | jevify pick -n 3 'the pricing change'
 gh pr list --json number,title | jq -c '.[]' | jevify filter 'touches the installer' | jq -r .number
@@ -58,10 +57,10 @@ cargo test 2>&1 | jevify is 'every failure is a network timeout' && cargo test
 until kubectl get pods | jevify is 'every pod is ready'; do sleep 5; done
 jevify is 'asks for a refund' 'mentions an order' --context mail.txt
 jevify pick --from tool 'keep my mac awake for an hour'
-jevify add --json --dry-run 'the token expiry fix'
 ```
 
-`pick` and `filter` print input records byte for byte; `label` prints `LABEL<TAB>RECORD`, the
+`pick` and `filter` print input records byte for byte; `filter --label a,b,c` prints
+`LABEL<TAB>RECORD`, the
 record unchanged after the tab, so `cut -f1` counts and `cut -f2-` gives line records back. A
 record is a line; `--para` reads blocks between blank lines, and `-0` reads NUL-separated
 records. These two split modes are mutually exclusive. `--files` reads paths from stdin and
@@ -82,11 +81,12 @@ step. A saved full input is a way back, not proof that every line was judged.
 
 - One jevify process per question, however many records. Never start one process per record
   in a shell loop, and never read files one by one to classify or find one; use `filter`,
-  `filter --files`, `label --files` or `pick --files`.
+  `filter --files`, `filter --files --label` or `pick --files`.
 - `why` answers with the cause and its line number: read that answer, and open the whole log
-  only when the answer is a symptom or `considered` is far below `total`. `label` takes at least two
-  distinct labels, none `?` or `NONE`, at most 99 keyless or 200 on TypeSafe; it saves nothing. Polling a changing state with `until` is
-  a different question on each snapshot.
+  only when the answer is a symptom or `considered` is far below `total`. `filter --label`
+  takes no statement and at least two distinct labels, none `?` or `NONE`, at most 99 keyless
+  or 200 on TypeSafe; it saves nothing. Polling a changing state with `until` is a different
+  question on each snapshot.
 - Write literal statements: “the customer is about to stop being a customer” avoids the
   ambiguity of “the customer is leaving.” Describe the evidence, not the fix you want.
 - Write conditions so yes means act. In human output, `is` with one statement prints nothing
@@ -100,6 +100,15 @@ step. A saved full input is a way back, not proof that every line was judged.
   Handle operational errors separately; they are not evidence about the commit.
 - Scores depend on backend and task. A higher threshold does not repair incomplete evidence,
   and text under judgment can argue with the judge. Do not use jevify as a security gate.
+
+### Other verbs
+
+| Situation | Command | Result |
+|:---|:---|:---|
+| Requested staging of one topic | `jevify add --dry-run 'the token expiry fix'` | Scores or stages individual hunks |
+
+`jevify add --json --dry-run 'the token expiry fix'` scores without staging; `--yes` stages,
+and only when the caller authorizes it (see Permissions and privacy).
 
 ## The marker
 
@@ -190,7 +199,7 @@ newest first` means an ordered listing was cut to its newest part. `fill` refuse
 non-Jev answers with exit 4, `api_unavailable`, `answered by <model>, not Jev`; a missing model
 name appears as `unknown` in `meta.model` and refuses too. This guard also applies to dry runs.
 
-`filter` and `label` exit 3 when every record is unsure, even when they print those records. `is` exits 0
+`filter`, with or without `--label`, exits 3 when every record is unsure, even when it prints those records. `is` exits 0
 when all statements hold, 1 when any is no, and 3 otherwise. Oversized `is` input abstains
 without a model call. Do not retry unchanged evidence to turn uncertainty into certainty.
 
@@ -209,7 +218,7 @@ the compact installed contract; [ROBOT_MODE.md](../../../../docs/ROBOT_MODE.md) 
 
 ## Permissions and privacy
 
-Allow the output verbs (`why`, `pick`, `filter`, `label`, `is`) freely. They do not execute the
+Allow the output verbs (`why`, `pick`, `filter`, `is`) freely. They do not execute the
 tool they select. Check the selected tool's help and write its arguments yourself.
 Allow `jevify fill --dry-run` freely. Allow `fill` per command prefix
 (`jevify fill -- git switch:*`), exactly as the command itself is allowed. jevify is not a

@@ -386,19 +386,6 @@ fn usage(argv: &Argv, message: &str) -> Option<(String, String)> {
         ));
     }
     if let Some(unexpected) = between(message, "unexpected argument '", "'") {
-        if verb == "label" && !unexpected.starts_with('-') {
-            let labels = argv
-                .words
-                .iter()
-                .flat_map(|w| w.split(','))
-                .filter(|w| !w.is_empty())
-                .collect::<Vec<_>>()
-                .join(",");
-            return Some((
-                "label takes one comma-separated list of labels".into(),
-                argv.with_words(&labels).render(),
-            ));
-        }
         if unexpected.starts_with('-') {
             let fixed = argv.without(unexpected).described();
             return Some((
@@ -481,7 +468,7 @@ fn no_input(argv: &Argv) -> (String, String) {
             "pick reads candidates from stdin: pipe a list, or let jevify list a kind with --from KIND (branch, commit, file, dir, tool, ...)".into(),
             format!("git log --oneline | {fixed}"),
         ),
-        "filter" | "label" if argv.has("--files") => (
+        "filter" if argv.has("--files") => (
             format!("{verb} --files reads paths from stdin"),
             format!("git ls-files | {fixed}"),
         ),

@@ -135,14 +135,22 @@ pub enum Cmd {
         )]
         min_lines: usize,
     },
-    /// Keep stdin records that satisfy a statement
+    /// Keep stdin records that satisfy a statement, or tag each record with one of --label's labels
     #[command(
-        after_help = "Example:\n  cargo test 2>&1 | jevify filter 'reports a failed assertion'\n\n-v inverts; -c prints the count. Unsure records stay unless --strict. --verbose has no short flag. --files reads stdin paths; hidden or secret-looking paths and symlink files receive no excerpt, and a file that cannot be read is named on stderr and comes out unsure (both count in excerpts withheld: N; records carry unreadable: REASON). Saves raw input, secrets included, for seven days, unless --no-save or JEVIFY_NO_SAVE=1 (JEVIFY_NO_CACHE does not stop it). Status: jevify filter: kept N of M, U unsure, full output: PATH.\nExit: 0 kept some, 1 kept none, 3 every record unsure. --json data: records[{text, ordinal, p, verdict, lossy?}], kept, total, unsure, complete, saved_input, excerpts_withheld. A skipped or failed save sets complete: false. Non-UTF-8 records have lossy: true."
+        after_help = "Examples:\n  cargo test 2>&1 | jevify filter 'reports a failed assertion'\n  gh issue list | jevify filter --label bug,feature,question | cut -f1 | sort | uniq -c\n\n-v inverts; -c prints the count. Unsure records stay unless --strict. --verbose has no short flag. --files reads stdin paths; hidden or secret-looking paths and symlink files receive no excerpt, and a file that cannot be read is named on stderr and comes out unsure (both count in excerpts withheld: N; records carry unreadable: REASON). Saves raw input, secrets included, for seven days, unless --no-save or JEVIFY_NO_SAVE=1 (JEVIFY_NO_CACHE does not stop it). Status: jevify filter: kept N of M, U unsure, full output: PATH.\nExit: 0 kept some, 1 kept none, 3 every record unsure. --json data: records[{text, ordinal, p, verdict, lossy?}], kept, total, unsure, complete, saved_input, excerpts_withheld. A skipped or failed save sets complete: false. Non-UTF-8 records have lossy: true.\n--label A,B,C takes no statement and no -v, -c or --strict: at least two labels, distinct, none empty, none ? or NONE. Each record comes out as LABEL<TAB>RECORD, in input order and unchanged after the tab; an unsure record gets ?. Saves nothing. Status: jevify filter: labelled N of M, U unsure.\nExit: 0 labelled, 3 every record unsure. --json data: records[{label, text, ordinal, p, lossy?}], labelled, total, unsure, complete, excerpts_withheld."
     )]
     Filter {
-        /// What must be true of a kept record; unquoted words are joined
-        #[arg(required = true, num_args = 1.., value_name = "STATEMENT")]
+        /// What must be true of a kept record; unquoted words are joined. Omitted with --label
+        #[arg(required_unless_present = "label", num_args = 1.., value_name = "STATEMENT")]
         statement: Vec<String>,
+        /// Tag each record with one of these labels instead: LABEL<TAB>RECORD, ? when unsure
+        #[arg(
+            long,
+            value_name = "A,B,C",
+            value_parser = parse_labels,
+            conflicts_with_all = ["statement", "invert", "count", "strict"]
+        )]
+        label: Option<Labels>,
         /// Keep the records that do not satisfy the statement
         #[arg(short = 'v')]
         invert: bool,
@@ -164,24 +172,6 @@ pub enum Cmd {
         /// Do not save the full input
         #[arg(long)]
         no_save: bool,
-    },
-    /// Tag each stdin record with one of the given labels: a label, a tab, the record; ? when unsure
-    #[command(
-        after_help = "Example:\n  gh issue list | jevify label bug,feature,question | cut -f1 | sort | uniq -c\n\nLabels are comma-separated: at least two, distinct, none empty, none ? or NONE. Each record comes out as LABEL<TAB>RECORD, in input order and unchanged after the tab; an unsure record gets ?. --files reads stdin paths and judges each file's first lines. Saves nothing.\nExit: 0 labelled, 3 every record unsure. --json data: records[{label, text, ordinal, p, lossy?}], labelled, total, unsure. Non-UTF-8 records have lossy: true."
-    )]
-    Label {
-        /// The labels, comma-separated, e.g. bug,feature,question
-        #[arg(value_name = "LABELS", value_parser = parse_labels)]
-        labels: Labels,
-        /// Split stdin on NUL bytes
-        #[arg(short = '0', conflicts_with = "para")]
-        nul: bool,
-        /// Split stdin into paragraphs
-        #[arg(long)]
-        para: bool,
-        /// Read paths from stdin and use file excerpts as evidence
-        #[arg(long)]
-        files: bool,
     },
     /// Ask a yes-or-no question about the text on stdin; the answer is the exit code (0 yes, 1 no, 3 unsure)
     #[command(
@@ -256,13 +246,13 @@ pub fn statements(args: &[String]) -> (Vec<String>, bool) {
     (args.to_vec(), unquoted)
 }
 
-/// The labels of `label`, validated once by the parser: at least two, distinct, none empty,
-/// none `?` (the unsure mark) or `NONE` (the internal option). Their count against the
-/// backend's window is checked in `cmd::label`, where the backend is known.
+/// The labels of `filter --label`, validated once by the parser: at least two, distinct, none
+/// empty, none `?` (the unsure mark) or `NONE` (the internal option). Their count against the
+/// backend's window is checked in `cmd::filter::label`, where the backend is known.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Labels(pub Vec<String>);
 
-const LABELS_FORM: &str = "at least two comma-separated labels, distinct, none empty, none ? or NONE: jevify label bug,feature";
+const LABELS_FORM: &str = "at least two comma-separated labels, distinct, none empty, none ? or NONE: jevify filter --label bug,feature";
 
 fn parse_labels(text: &str) -> Result<Labels, String> {
     let labels: Vec<String> = text.split(',').map(str::to_owned).collect();

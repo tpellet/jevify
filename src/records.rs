@@ -364,7 +364,7 @@ fn excerpt_of(cwd: &Path, path: &Path) -> Result<Option<String>, String> {
     }))
 }
 
-/// The stdin of `filter` and `label`: its records, deduplicated and capped, with excerpts
+/// The stdin of `filter`: its records, deduplicated and capped, with excerpts
 /// read for `--files`; judged one Choice per distinct record and written out in input order.
 pub struct Input {
     verb: &'static str,

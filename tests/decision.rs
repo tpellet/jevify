@@ -144,11 +144,11 @@ async fn label_records_choice_gates_without_a_noul() {
     .await;
     let v = run(
         common::jevify_classifier(&server),
-        &["label", "bug,feature"],
+        &["filter", "--label", "bug,feature"],
         "crash\n",
     )
     .await;
-    let gates = decision(&v, "label", "classifier");
+    let gates = decision(&v, "filter", "classifier");
     assert_eq!(
         gates,
         vec![

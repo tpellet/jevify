@@ -15,13 +15,21 @@ block. [Verbs](guide/verbs.md) and [Kinds](guide/kinds.md) give argument details
 | Handle alone | `jevify pick --from branch 'the auth refactor'` |
 | Installed tool | `jevify pick --from tool 'keep my mac awake for an hour'` |
 | Records matching a statement | `gh issue list \| jevify filter 'reports a crash'` |
-| Bucket for each record | `gh issue list \| jevify label bug,feature,question` |
+| Bucket for each record | `gh issue list \| jevify filter --label bug,feature,question` |
 | Condition for the next step | `jevify is 'asks for a refund' --context mail.txt` |
-| Stage one authorized topic | `jevify add --dry-run 'the token expiry fix'` |
 
 Cheap tools narrow the input first. One process handles many records; avoid loops of `is`
-calls and one read per file. Use `--files` with `pick`, `filter` or `label` to judge path lists.
+calls and one read per file. Use `--files` with `pick` or `filter` to judge path lists.
 Write literal questions about evidence. Counting, arithmetic and date ordering belong to code.
+
+### Other verbs
+
+| Need | Command |
+|:---|:---|
+| Stage one authorized topic | `jevify add --dry-run 'the token expiry fix'` |
+
+`add` changes the git index and nothing else; the caller authorizes staging with `--yes`.
+[Verbs](guide/verbs.md#add) has its contract.
 
 ## Input and execution
 
@@ -75,7 +83,7 @@ messages are for people. `error.example` gives a corrected command to inspect be
 | `pick --from` | matches without `line`; `reason`, `candidates`, `total`, `omitted`, `windows`, `finalists_per_window` |
 | `why` | `causes[{line,text,p,context[]}]`, `any`, `considered`, `total`, `hint`, `saved_input`, `complete` |
 | `filter` | `records[{text,ordinal,p,verdict,lossy?,unreadable?}]`, `kept`, `total`, `unsure`, `saved_input`, `complete`, `excerpts_withheld` |
-| `label` | `records[{label,text,ordinal,p,lossy?,unreadable?}]`, `labelled`, `total`, `unsure`, `complete`, `excerpts_withheld` |
+| `filter --label` | `records[{label,text,ordinal,p,lossy?,unreadable?}]`, `labelled`, `total`, `unsure`, `complete`, `excerpts_withheld` |
 | `is` | `p`, `verdict`, `truncated`; several statements add `statements[{statement,verdict,p}]`; oversized context adds `reason` |
 | `add` | `hunks[{file,header,p,staged}]` |
 | `capabilities` | commands, flags, exits, error kinds, environment, kinds and safety |
@@ -134,14 +142,15 @@ prevents execution. The child inherits the variable; unset it before a nested `f
 
 ## Evidence and records
 
-`pick` and `filter` preserve selected bytes and input order; `label` prints `LABEL<TAB>RECORD`.
+`pick` and `filter` preserve selected bytes and input order; `filter --label a,b,c` prints
+`LABEL<TAB>RECORD`, `?` when unsure, and takes no statement, `-v`, `-c` or `--strict`.
 Ordinals are 1-based. Non-UTF-8 machine text is lossy and marked `lossy: true`. `-0` and
 `--para` change record splitting and conflict. Identical records are judged once.
-`filter` keeps unsure records unless strict; `filter` and `label` exit 3 when all are unsure.
-A late error can leave a prefix on human stdout.
+`filter` keeps unsure records unless strict; with or without `--label`, it exits 3 when all
+are unsure. A late error can leave a prefix on human stdout.
 
 `--files` withholds hidden, secret-looking and symlink excerpts. Unreadable files are named on
-stderr, and remain unsure in `filter` and `label` without a model request. The path can still
+stderr, and remain unsure in `filter` without a model request. The path can still
 be a candidate even when its content is withheld. [Privacy](../PRIVACY.md) states the checks.
 
 Compare `why.considered` with `why.total`; incomplete evidence cannot prove a whole-log verdict.

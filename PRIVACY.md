@@ -21,8 +21,7 @@ and health requests never follow redirects. The TypeSafe key never goes to class
 | `pick --from` | the same evidence as `fill` for the kind | no user command executes |
 | `pick` | description and distinct, bounded selection records | evidence beyond the per-item budget |
 | `pick --files` | description, paths and eligible finalist excerpts | withheld file content and paths outside the candidate list |
-| `filter` | statement and distinct record evidence; with `--files`, paths and eligible excerpts | content beyond excerpts; unreadable files remain unsure without a request |
-| `label` | labels and distinct record evidence; with `--files`, paths and eligible excerpts | content beyond excerpts; unreadable files remain `?` without a request |
+| `filter` | statement, or the labels of `--label`, and distinct record evidence; with `--files`, paths and eligible excerpts | content beyond excerpts; unreadable files remain unsure (`?` under `--label`) without a request |
 | `why` | bounded failure-log selection evidence | lines filtered out locally |
 | `is` | statements and complete supported context | oversized context abstains before inference |
 | `add` | topic and complete unstaged hunks of tracked files | untracked files and content outside the diff; oversized hunks are rejected |
@@ -74,8 +73,8 @@ decision-contract version. `--no-cache` and `--no-save` control different stores
 
 Only `why` and `filter` save raw input, before inference, with directory mode 0700 and file
 mode 0600. Saving identical input refreshes its retention. The path appears on stderr and in
-`data.saved_input`; a failed or skipped save sets `data.complete=false`. `label` saves no raw
-input, though its answers can be cached.
+`data.saved_input`; a failed or skipped save sets `data.complete=false`. `filter --label`
+saves no raw input, though its answers can be cached.
 
 Pruning only visits `outputs`, follows no symlink, descends into no subdirectory and deletes
 only regular files with the store's own names (`<blake3-16>.log` and stranded temporary names).
