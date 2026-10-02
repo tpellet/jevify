@@ -11,6 +11,7 @@
 #     with:
 #       log: build.log
 #       typesafe-api-key: ${{ secrets.TYPESAFE_API_KEY }}   # optional; keyless without it
+#       classes: compile|test|flaky|infra                     # optional; sorts the failure
 #
 # The action installs the latest jevify release with its shell installer when
 # jevify is not on PATH (Linux and macOS runners), runs `jevify why < log`, and
@@ -19,6 +20,12 @@
 # any other failure is a warning in the log. It never fails the job: the failed
 # step already did. The log goes to the backend with best-effort redaction of
 # secrets; jevify saves no local copy (--no-save).
+#
+# With `classes`, the action then runs `jevify fill --dry-run --context <why
+# output> -- echo '@{one:CLASSES:QUESTION}'` on the lines `why` printed and
+# writes the chosen class under the heading. An abstention (exit 3) writes
+# nothing extra. benchmarks/why-triage.md measures the default classes and
+# question on 34 failed runs.
 name: jevify why
 description: Point at the line that explains a failed build or test and write it to the job summary.
 author: tpellet
@@ -33,6 +40,14 @@ inputs:
     description: TypeSafe API key, recommended for CI. Without it jevify uses the free keyless classifier.dev tier ($0.50 per IP per UTC day, shared by everyone behind that IP), which is meant for trying jevify.
     required: false
     default: ""
+  classes:
+    description: Pipe-separated classes to sort the failure into after `why`, such as `compile|test|flaky|infra`. Empty skips the classification. The class appears under the heading in the job summary; an abstention writes nothing extra.
+    required: false
+    default: ""
+  classes-question:
+    description: The question the class answers, with one definition per class. The default defines `compile|test|flaky|infra`; rewrite it when the classes change, since a question without definitions abstains or misclassifies far more often (benchmarks/why-triage.md).
+    required: false
+    default: "the kind of CI failure these lines show. compile: the code or its dependencies fail to build, type-check, lint or resolve. test: a test runs and fails on an assertion, exception or output mismatch. flaky: a timeout, retry limit or resource bound that a rerun could pass. infra: credentials, permissions, network, downloads, workflow or bot configuration, or a security scanner"
 runs:
   using: composite
   steps:
@@ -41,6 +56,8 @@ runs:
       env:
         LOG_FILE: ${{ inputs.log }}
         TYPESAFE_API_KEY: ${{ inputs.typesafe-api-key }}
+        CLASSES: ${{ inputs.classes }}
+        CLASSES_QUESTION: ${{ inputs.classes-question }}
         JEVIFY_NO_MODIFY_PATH: "1"
         JEVIFY_DEADLINE: "120"
       run: |
@@ -56,9 +73,28 @@ runs:
         answer=$("$jevify" why --no-save < "$LOG_FILE")
         rc=$?
         if [ "$rc" -eq 0 ] && [ -n "$answer" ]; then
+          class=""
+          if [ -n "$CLASSES" ]; then
+            why_file="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/jevify-why-$$.txt"
+            printf '%s\n' "$answer" > "$why_file"
+            filled=$("$jevify" fill --dry-run -q --context "$why_file" -- echo "@{one:${CLASSES}:${CLASSES_QUESTION}}" < /dev/null)
+            frc=$?
+            if [ "$frc" -eq 0 ]; then
+              # --dry-run prints the shell-quoted command: 'echo' 'compile'
+              class=${filled#\'echo\' }
+              class=${class#\'}
+              class=${class%\'}
+            elif [ "$frc" -ne 3 ]; then
+              echo "::warning title=jevify why::jevify fill exited $frc; the job summary has no class"
+            fi
+          fi
           {
             echo '### Why it failed'
             echo
+            if [ -n "$class" ]; then
+              echo "Class: **${class}**"
+              echo
+            fi
             echo '```text'
             printf '%s\n' "$answer"
             echo '```'

@@ -1,0 +1,35 @@
+run_id	repo	class	gold_line	reason
+33383062728	starship/starship	test	4672	git_commit unit test panics on unequal rendered strings
+36283748467	rust-lang/rust-analyzer	compile	361	E0080 compile-time assertion on mismatched Unicode versions
+36287138011	clap-rs/clap	flaky	770	tarpaulin times out waiting for the test response
+35677316906	serde-rs/serde	test	512	UI snapshot test reports a diagnostic mismatch
+36343947828	rustls/rustls	compile	899	E0432 unresolved import in the test build
+36387759021	zed-industries/zed	infra	172	GitHub GraphQL API answers 403 to the scheduled script
+35779328486	npm/cli	infra	336	nightly archive download is not gzip
+33851901321	eslint/eslint	flaky	284	integration suite setup hook times out after 10 s
+34234731508	webpack/webpack	compile	1027	cspell rejects unknown words in README.md
+36391014017	vercel/next.js	infra	522	gh runs without GH_TOKEN in the workflow
+36087475151	sveltejs/svelte	flaky	350	test times out after 30 s
+35342760119	pydantic/pydantic	infra	1056	task runner cannot find task generate_dev_jwks
+35831999592	pytest-dev/pytest	infra	730	NumPy import fails on the PyPy runner (CYTHON_USE_TYPE_SPECS)
+34252544596	pallets/flask	compile	278	Werkzeug ImmutableDict deprecation is an error at test collection
+34077229123	scikit-learn/scikit-learn	test	3487	OpenML test raises TypeError on an int passed to a regex
+34921188397	home-assistant/core	compile	453	container build cannot resolve the installer>=1.0 requirement
+32792099048	psf/requests	infra	45	action rejects a github-token input longer than 100 characters
+34167961970	golangci/golangci-lint	infra	260	zizmor flags the dependabot.yml cooldown configuration
+29171913482	caddyserver/caddy	infra	4632	Dependabot cannot resolve x/crypto x509roots/fallback
+36173147923	grafana/loki	flaky	1227	test binary times out after 15 min with TestRuleEval running
+36173811309	tailscale/tailscale	test	406	peer-relay integration test asserts a node pair uses the relay
+31059356441	helm/helm	infra	456	govulncheck reports GO-2026-5158 in a dependency
+30963144784	helm/helm	infra	459	govulncheck reports GO-2026-5158 in a dependency
+30774399212	helm/helm	infra	459	govulncheck reports GO-2026-5158 in a dependency
+34228656738	docker/compose	test	54784	up_test asserts the container state running, finds created
+33768370418	aquasecurity/trivy	compile	8980	k8s.io/api module lacks the imported scheduling/v1alpha2 package
+33110233061	neovim/neovim	test	8982	codelens assertion expects equal values
+33084302624	neovim/neovim	flaky	10776	TUI shutdown assertion exhausts 31 retries waiting for the process to exit
+34420266410	redis/redis	flaky	8631	replication memory assertion measures 1074632 against a 1000000 bound
+34135873264	laravel/framework	infra	937	file_put_contents on the Windows runner: permission denied
+36397536870	ruby/ruby	flaky	3958	assert_separately subprocess times out after 30 s
+34207109750	pnpm/pnpm	flaky	3292	fetch test exceeds its 240 s Jest timeout
+29892452615	prometheus/prometheus	infra	226	govulncheck reports GO-2026-5970 in golang.org/x/text
+29868709147	prometheus/prometheus	infra	226	govulncheck reports GO-2026-5970 in golang.org/x/text
