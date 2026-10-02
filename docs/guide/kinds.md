@@ -148,7 +148,8 @@ printf '%s\n' '{"kind":"vm","list":["multipass","list","--format","csv"],"field"
   for a symlink. The status line says `excerpts withheld: N`. The name still reaches the
   backend; the content does not.
 - A list with no kind is a pipe into `'@{-:…}'`, shaped by `sed`, `cut` or `jq` first:
-  `cargo test -- --list | sed 's/: test$//' | jevify fill -- cargo test '@{-:the retry backoff cap}'`.
+  `cargo test -- --list 2>/dev/null | sed -n 's/: test$//p' | jevify fill -- cargo test '@{-:the retry backoff cap}' -- --exact`
+  ([the recipe](../../benchmarks/test-by-behaviour.md), with its pytest and Go forms).
 
 ## The status line
 

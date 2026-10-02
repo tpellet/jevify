@@ -3,8 +3,9 @@
 ## Do I need an API key?
 
 No. classifier.dev provides a free budget of $0.50 per IP per UTC day, subject to $100 per
-day across everyone and four concurrent requests. Set `TYPESAFE_API_KEY_FILE=/path/to/key`
-to use TypeSafe credits. `JEVIFY_BACKEND=typesafe|classifier` forces a backend;
+day across everyone and four concurrent requests; it is for trying jevify, and CI and teams
+need a key. Set `TYPESAFE_API_KEY_FILE=/path/to/key` to use TypeSafe credits; keys come from
+<https://console.typesafe.ai/keys>. `JEVIFY_BACKEND=typesafe|classifier` forces a backend;
 `jevify health` checks it. Scores are not assumed interchangeable between backends.
 
 ## What does a call cost?
@@ -30,7 +31,8 @@ answer cache. A failed or skipped save sets `data.complete=false`.
 Nothing fits, two candidates are too close, or the evidence is unsure. `pick` and `why` can
 abstain instead of selecting. `fill` runs nothing if any marker abstains. Its reasons include
 `no_match`, `ambiguous`, `unsure_flag` and `insufficient_evidence`; machine output has
-`error: null` and the reason in `data`. A shortlist contains alternatives, not selected handles.
+`error: null`, the reason in `data` and the nearest candidates in `data.shortlist`. A shortlist
+contains alternatives, not selected handles.
 
 `filter` keeps unsure records unless `--strict`; `filter --label` marks them `?`. Both exit 3
 when all records are unsure. `is` exits 3 when no statement is no and at least one is unsure, or the

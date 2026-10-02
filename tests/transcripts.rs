@@ -87,6 +87,9 @@ struct Transcript {
     argv: &'static [&'static str],
     stdin: Stdin,
     expect: Expect,
+    /// What the page says the keyless backend decides, when the page says it decides
+    /// differently from the transcript it prints; `None` means the same as `expect`.
+    keyless: Option<Expect>,
     /// What the console block prints for this decision, when that is not the chosen item
     /// itself: `is` answers with an exit code, so its block prints what the `&&` ran.
     on_page: &'static [&'static str],
@@ -99,6 +102,15 @@ struct Transcript {
 /// grows cannot be an expectation.
 const RELEASE_LOG: &[&str] = &["git", "log", "--oneline", "v0.8.3..v0.9.3"];
 
+/// The test names of this repository, shaped exactly as the README's pipeline shapes them.
+/// `cargo test -- --list` lists the already built test binaries, so running it from inside a
+/// test is a listing, not a build.
+const TEST_NAMES: &[&str] = &[
+    "sh",
+    "-c",
+    "cargo test -- --list 2>/dev/null | sed -n 's/: test$//p'",
+];
+
 fn transcripts() -> Vec<Transcript> {
     vec![
         Transcript {
@@ -106,8 +118,30 @@ fn transcripts() -> Vec<Transcript> {
             argv: &["why"],
             stdin: Stdin::File("docs/demo/build.log"),
             expect: Expect::Chose(&["error[E0425]: cannot find value `conifg` in this scope"]),
+            keyless: None,
             on_page: &[],
-            cites: &[Cite(README, 37), Cite(GETTING_STARTED, 49)],
+            cites: &[Cite(README, 22), Cite(GETTING_STARTED, 54)],
+        },
+        // README's "run the test you mean": the listing is this repository's own test names,
+        // as the page's pipeline shapes them. The check only compares the chosen name, so the
+        // listing may grow; the row stops being true only if that test is renamed.
+        Transcript {
+            shown: "cargo test -- --list 2>/dev/null | sed -n 's/: test$//p' | jevify fill --dry-run -- cargo test '@{-:a 429 response is retried and the answer is cached}' -- --exact",
+            argv: &[
+                "fill",
+                "--dry-run",
+                "--",
+                "cargo",
+                "test",
+                "@{-:a 429 response is retried and the answer is cached}",
+                "--",
+                "--exact",
+            ],
+            stdin: Stdin::Listing(TEST_NAMES),
+            expect: Expect::Chose(&["a_429_is_retried_and_the_answer_is_cached"]),
+            keyless: None,
+            on_page: &[],
+            cites: &[Cite(README, 52)],
         },
         Transcript {
             shown: "git log --oneline v0.8.3..v0.9.3 | jevify fill --field 1 --dry-run -- git show --stat --format=%s '@{-:made route abstain when two commands are too close}'",
@@ -125,8 +159,9 @@ fn transcripts() -> Vec<Transcript> {
             ],
             stdin: Stdin::Listing(RELEASE_LOG),
             expect: Expect::Chose(&["317cbf7"]),
+            keyless: None,
             on_page: &[],
-            cites: &[Cite(GETTING_STARTED, 136)],
+            cites: &[Cite(GETTING_STARTED, 144)],
         },
         // README's promise under the nothing-fits demo: "when no commit fits your description,
         // no command runs". Over the same release listing, which holds no such commit.
@@ -144,6 +179,7 @@ fn transcripts() -> Vec<Transcript> {
             ],
             stdin: Stdin::Listing(RELEASE_LOG),
             expect: Expect::NothingFits,
+            keyless: None,
             on_page: &[],
             cites: &[],
         },
@@ -157,8 +193,9 @@ fn transcripts() -> Vec<Transcript> {
                 "bug", "feature", "question", "bug", "feature", "question", "bug", "feature",
                 "question", "bug",
             ]),
+            keyless: None,
             on_page: &[],
-            cites: &[Cite(GETTING_STARTED, 92)],
+            cites: &[Cite(GETTING_STARTED, 97)],
         },
         Transcript {
             shown: "jevify filter 'reports a crash' < docs/demo/issues.txt",
@@ -168,40 +205,45 @@ fn transcripts() -> Vec<Transcript> {
                 "#312 Crash when the config file is empty",
                 "#290 Panic on non-UTF-8 file names",
             ]),
+            keyless: None,
             on_page: &[],
-            cites: &[Cite(GETTING_STARTED, 62)],
+            cites: &[Cite(GETTING_STARTED, 67)],
         },
         Transcript {
             shown: "printf 'build started\\nerror: connection timed out\\nbuild stopped\\n' | jevify filter --strict 'reports a network failure'",
             argv: &["filter", "--strict", "reports a network failure"],
             stdin: Stdin::Text("build started\nerror: connection timed out\nbuild stopped\n"),
             expect: Expect::Chose(&["error: connection timed out"]),
+            keyless: None,
             on_page: &[],
-            cites: &[Cite(GETTING_STARTED, 79)],
+            cites: &[Cite(GETTING_STARTED, 84)],
         },
         Transcript {
             shown: "jevify pick 'what I paid a streaming service' < docs/demo/downloads.txt",
             argv: &["pick", "what I paid a streaming service"],
             stdin: Stdin::File("docs/demo/downloads.txt"),
             expect: Expect::Chose(&["spotify_receipt.pdf"]),
+            keyless: None,
             on_page: &[],
-            cites: &[Cite(GETTING_STARTED, 68)],
+            cites: &[Cite(GETTING_STARTED, 73)],
         },
         Transcript {
             shown: "jevify pick 'the tax return' < docs/demo/downloads.txt",
             argv: &["pick", "the tax return"],
             stdin: Stdin::File("docs/demo/downloads.txt"),
             expect: Expect::NothingFits,
+            keyless: None,
             on_page: &[],
-            cites: &[Cite(GETTING_STARTED, 119)],
+            cites: &[Cite(GETTING_STARTED, 127)],
         },
         Transcript {
             shown: "jevify is 'asks for a refund' < docs/demo/mail.txt && echo refund",
             argv: &["is", "asks for a refund"],
             stdin: Stdin::File("docs/demo/mail.txt"),
             expect: Expect::Chose(&["yes"]),
+            keyless: None,
             on_page: &["refund"],
-            cites: &[Cite(GETTING_STARTED, 103)],
+            cites: &[Cite(GETTING_STARTED, 108)],
         },
         Transcript {
             shown: "git ls-files | jevify pick --files 'where the command-line flags are defined'",
@@ -212,8 +254,11 @@ fn transcripts() -> Vec<Transcript> {
             ],
             stdin: Stdin::Listing(&["git", "ls-files"]),
             expect: Expect::Chose(&["src/cli.rs"]),
+            // The page says so: the keyless backend puts `src/cli.rs` first on its shortlist
+            // but its any-candidate-fits check stays under the threshold, so it abstains.
+            keyless: Some(Expect::NothingFits),
             on_page: &[],
-            cites: &[Cite(GETTING_STARTED, 110)],
+            cites: &[Cite(GETTING_STARTED, 118)],
         },
     ]
 }
@@ -352,7 +397,11 @@ fn run_transcripts(backend: &str) {
                 .join(", ")
         };
         let got = chosen(case.argv[0], &value["data"]);
-        match case.expect {
+        let expect = match (backend, case.keyless) {
+            ("classifier", Some(keyless)) => keyless,
+            _ => case.expect,
+        };
+        match expect {
             Expect::Chose(want) => {
                 assert_eq!(
                     out.status.code(),

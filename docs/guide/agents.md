@@ -22,9 +22,11 @@ interface. The [robot contract](../ROBOT_MODE.md) defines fields, telemetry and 
 | File by content | `git ls-files \| jevify pick --files 'where retries back off'` |
 | Installed tool by task | `jevify pick --from tool 'render a terminal demo from a tape file'` |
 | Only the handle | `jevify pick --from pr 'the Windows path fix'` |
+| The test you can describe | `cargo test -- --list 2>/dev/null \| sed -n 's/: test$//p' \| jevify fill -- cargo test '@{-:what the test checks}' -- --exact` |
 | Relevant records | `gh issue list \| jevify filter 'reports a crash'` |
 | Labels for many records | `gh issue list \| jevify filter --label bug,feature,question` |
 | Predicate for the next action | `jevify is 'asks for a refund' --context mail.txt` |
+| A claim checked against a log | `jevify is 'the failure is in TestSqlUpdate' --context test.log` |
 
 ## Machine output
 
@@ -36,8 +38,10 @@ interface. The [robot contract](../ROBOT_MODE.md) defines fields, telemetry and 
 
 Branch on `exit_code`, then inspect `data`. `ok` is true for no (1) and abstention (3) as well
 as success (0). `fill` requires `--dry-run` with `--json`; a successful resolution supplies
-`data.argv`. On abstention, `data.shortlist` where present contains candidates and evidence,
-not selected handles. `fill` reports each marker's reason and its first failure in argv order.
+`data.argv`. On abstention, `data.shortlist` lists the nearest candidates with scores, not
+selected handles; `fill` lists it for the first failed marker and `data.markers[].shortlist`
+per marker, and reports each marker's reason and its first failure in argv order. Every error
+carries `error.hint` and `error.example`, a corrected command.
 
 | Code | Meaning |
 |---:|:---|
@@ -84,16 +88,29 @@ and retention; semantic judgments are not security gates.
 
 ## Failure integrations
 
-The [Claude Code plugin](../../plugins/jevify/skills/jevify/SKILL.md) includes a Bash
-`PostToolUseFailure` hook that supplies a `why` answer for long failures. Its input can be
-truncated by Claude Code; pipe the full output when the missing middle matters.
-The [GitHub Action](../../action.yml) writes the cause to the job summary:
+`jevify why --hook claude` is the body of a Claude Code `PostToolUseFailure` hook on Bash, and
+`jevify why --hook codex` of a Codex `PostToolUse` hook (`~/.codex/hooks.json` or the
+repository's `.codex/hooks.json`): it reads the payload on stdin, and when the failed output has
+at least 80 lines prints the hook JSON with the pointed line, otherwise nothing, always exit 0.
+The [Claude Code plugin](../../plugins/jevify/skills/jevify/SKILL.md) installs that hook, the
+skill and the MCP server. Claude Code can truncate the output it passes; pipe the full output
+when the missing middle matters.
+
+`jevify mcp` serves `why`, `is` and `pick` over stdio: `claude mcp add jevify -- jevify mcp`,
+an `[mcp_servers.jevify]` entry in Codex's `config.toml`, or a `.mcpb` bundle for Claude Desktop
+([details](../ROBOT_MODE.md#the-mcp-server)).
+
+The [GitHub Action](../../action.yml) writes the cause to the job summary, and with `classes`
+the kind of failure (26 of 34 benchmark runs in the labelled class,
+[triage](../../benchmarks/why-triage.md)):
 
 ```yaml
 - uses: tpellet/jevify@<tag>
   if: failure()
   with:
     log: build.log
+    typesafe-api-key: ${{ secrets.TYPESAFE_API_KEY }}
+    classes: compile|test|flaky|infra
 ```
 
 Choose a release tag containing the action. Save the earlier failing step with

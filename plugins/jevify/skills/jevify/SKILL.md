@@ -16,10 +16,10 @@ question, the input is short enough to read, or you already know the required va
 
 Measured 2026-09-28 on TypeSafe across 34 failed GitHub Actions runs from 30 public repositories:
 `why` puts the root-cause line first in 30/34, points at a wrong line in four, and abstains in
-none. A separate `-n 3` invocation finds it in the top three in 31/34. JSON stdout contains
-99.76% fewer estimated tokens than the full logs; p50 latency is 0.87 s on a loaded machine.
-These are development-set payload and retrieval measurements, not agent task success or total
-inference cost. [Cases, limits and baselines](../../../../benchmarks/why-ci.md).
+none; `grep -iE 'error|fail|panic' | tail -n 5` keeps a gold line in 11/34 and `tail -n 50` in
+10/34. A separate `-n 3` invocation finds it in the top three in 31/34. p50 latency is 0.87 s on
+a loaded machine, 0.5 s on a quiet one. These are development-set retrieval measurements, not
+agent task success. [Cases, limits and baselines](../../../../benchmarks/why-ci.md).
 
 ## The verbs
 
@@ -38,7 +38,8 @@ only to choose from it by eye.
 | Want the value without the run | `jevify pick --from branch 'the auth refactor'` | A handle, or abstention |
 | An option depends on text you have not read | `jevify fill --context report.md -- gh issue create --label '@{one:bug\|feature\|docs:what kind of report}'` | A caller-written option; `'@{flag:--draft:question}'` for a conditional flag |
 | A failed build has more than about 50 lines, or grep finds only the symptom | `cargo test 2>&1 \| jevify why` | A cause with line number and context; read that, not the whole log |
-| Many records, one question | `gh issue list \| jevify filter 'reports a crash'` | Matching and unsure records, like `grep` by meaning |
+| A claim to check before acting on it | `jevify is 'the failure is in TestSqlUpdate' --context test.log` | Exit 0 when the log establishes it, 1 when it does not; 20/20 on real logs, no false yes (`benchmarks/claim-check.md`) |
+| Many records, one question | `gh issue list \| jevify filter 'reports a crash'` | Matching and unsure records; the words need not match |
 | Many files, one question | `fd -0 -e rs \| jevify filter -0 --files 'tests backend throttling'` | Paths judged by file content |
 | Every record or file needs a bucket | `ls reports/*.md \| jevify filter --files --label bug,feature,docs` | Each record with its label, `?` when unsure; one call, not one read per file |
 | One record or file out of many, described rather than named | `git ls-files \| jevify pick --files 'guards downloads against internal addresses'` | A selected input record, or abstention |
@@ -211,10 +212,13 @@ and detects exhaustion through these errors; it consumes backend budget.
 
 Use `--json` for one envelope on one line when you need scores or structured errors; leave it off for record pipelines and
 silent predicates. The envelope is `{ok, command, version, exit_code, data, meta, error}`;
-`error` contains `kind`, `message`, `hint`, and `example`. Branch on the process exit code or
-`exit_code`, then inspect `data`. An abstention's `data.shortlist`, where present, contains
-candidates with scores and evidence, not chosen answers. `jevify capabilities --json` prints
-the compact installed contract; [ROBOT_MODE.md](../../../../docs/ROBOT_MODE.md) gives details.
+`error` contains `kind`, `message`, `hint`, and `example`: every error names a corrected
+command to inspect before running. Branch on the process exit code or `exit_code`, then inspect
+`data`. An abstention's `data.shortlist` lists the nearest candidates with scores, not chosen
+answers; `fill` lists it for the first failed marker and `data.markers[].shortlist` per marker.
+`jevify capabilities --json` prints the compact installed contract;
+[ROBOT_MODE.md](../../../../docs/ROBOT_MODE.md) gives details. The plugin also registers
+`jevify mcp`, the same `why`, `is` and `pick` as MCP tools.
 
 ## Permissions and privacy
 
@@ -244,14 +248,17 @@ guarantee that the remaining input contains no sensitive information.
 
 ## `why` on every failure: the hook and the GitHub Action
 
-The plugin's `PostToolUseFailure` hook on Bash (`hooks/why-on-fail.sh`) runs `jevify why` on a
-failed command's output when it has at least `JEVIFY_HOOK_MIN_LINES` lines (default 80). The
-line it points at, with context and the saved-output path, arrives next to the error: read that
-line first. The hook adds nothing when the command was interrupted, `jevify` or `jq` is not on
+The plugin's `PostToolUseFailure` hook on Bash (`hooks/why-on-fail.sh`) is the one command
+`jevify why --hook claude`: it reads the hook payload on stdin and runs `why` on the failed
+command's output when it has at least `--min-lines` lines (default 80, `JEVIFY_HOOK_MIN_LINES`).
+The line it points at, with context and the saved-output path, arrives next to the error: read
+that line first. The hook adds nothing when the command was interrupted, `jevify` is not on
 PATH, `why` abstains or fails, or 20 seconds pass, and it never blocks a tool call. It uses the
 session's backend configuration and never reads the key; the output goes to the backend as in
 any `why` call. It judges the failed result as Claude Code passes it, about 10,000 characters
 of head and tail, so a cause in the cut middle needs `cmd 2>&1 | jevify why` on the whole output.
+Codex runs the same command as `jevify why --hook codex` on `PostToolUse` for Bash, from
+`~/.codex/hooks.json` or the repository's `.codex/hooks.json`.
 
 In GitHub Actions, the repository's `action.yml` installs jevify and writes the pointed line to
 the job summary; it writes nothing on abstention and never fails the job. `shell: bash` gives
@@ -263,5 +270,9 @@ release tag containing the action:
   shell: bash
 - if: failure()
   uses: tpellet/jevify@<tag>
-  with: { log: build.log }  # optional: typesafe-api-key
+  with: { log: build.log, classes: compile|test|flaky|infra }  # optional: typesafe-api-key
 ```
+
+`classes` sorts the failure from the lines `why` printed and writes the class under the
+heading: 26 of the 34 benchmark runs land in their hand-labelled class, 4 abstain, 4 are wrong
+(`benchmarks/why-triage.md`).

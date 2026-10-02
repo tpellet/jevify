@@ -10,6 +10,7 @@ block. [Verbs](guide/verbs.md) and [Kinds](guide/kinds.md) give argument details
 | Need | Command |
 |:---|:---|
 | Cause in a failed CI log | `gh run view <id> --log-failed \| jevify why` |
+| The test you can describe | `cargo test -- --list 2>/dev/null \| sed -n 's/: test$//p' \| jevify fill -- cargo test '@{-:what the test checks}' -- --exact` |
 | PR by description | `jevify fill --dry-run -- gh pr checkout '@{pr:the Windows path fix}'` |
 | Branch or commit by description | `jevify fill --dry-run -- git show '@{commit:fixes retry backoff}'` |
 | Handle alone | `jevify pick --from branch 'the auth refactor'` |
@@ -17,6 +18,7 @@ block. [Verbs](guide/verbs.md) and [Kinds](guide/kinds.md) give argument details
 | Records matching a statement | `gh issue list \| jevify filter 'reports a crash'` |
 | Bucket for each record | `gh issue list \| jevify filter --label bug,feature,question` |
 | Condition for the next step | `jevify is 'asks for a refund' --context mail.txt` |
+| A claim checked against a log | `jevify is 'the failure is in TestSqlUpdate' --context test.log` |
 
 Cheap tools narrow the input first. One process handles many records; avoid loops of `is`
 calls and one read per file. Use `--files` with `pick` or `filter` to judge path lists.
@@ -74,11 +76,12 @@ Pipes do not implicitly enable it. Human stdout carries handles and records, std
 
 Branch on `exit_code`, which equals process status, then inspect `data`. `ok` only means jevify
 completed without its own error: it is true on no (1) and abstention (3). Error kinds are stable;
-messages are for people. `error.example` gives a corrected command to inspect before running.
+messages are for people. Every error carries `error.hint` and `error.example`, a corrected
+command to inspect before running; human output prints the same two lines as `hint:` and `try:`.
 
 | Verb | Data |
 |:---|:---|
-| `fill --dry-run` | `argv` on success, `reason`, `markers[{arg,kind,reason,handle,p,candidates,total,omitted}]` |
+| `fill --dry-run` | `argv` on success, `reason`, `shortlist` on exit 3, `markers[{arg,kind,reason,handle,p,candidates,total,omitted,shortlist}]` |
 | `pick` | `matches[{line,text,ordinal,p,lossy?}]`, `any`, `source` |
 | `pick --from` | matches without `line`; `reason`, `candidates`, `total`, `omitted`, `windows`, `finalists_per_window` |
 | `why` | `causes[{line,text,p,context[]}]`, `any`, `considered`, `total`, `hint`, `saved_input`, `complete` |
@@ -87,12 +90,16 @@ messages are for people. `error.example` gives a corrected command to inspect be
 | `is` | `p`, `verdict`, `truncated`; several statements add `statements[{statement,verdict,p}]`; oversized context adds `reason` |
 | `add` | `hunks[{file,header,p,staged}]` |
 | `capabilities` | commands, flags, exits, error kinds, environment, kinds and safety |
-| `health` | `backend`, `base_url`, `key`, `api`, `latency_ms`, `model` |
+| `health` | `backend`, `base_url`, `key`, `key_url`, `api`, `latency_ms`, `model` |
 | `init agents` | `script` |
 
-An abstaining selection can provide `data.shortlist`: candidates with evidence and scores,
-not chosen answers. Exit 3 never authorizes use of a shortlisted handle. `fill` gives
-`data.reason` for the first failed marker in argv order and `data.markers[].reason` per marker.
+On exit 3, `data.shortlist` lists the nearest candidates, `[{text, p}]`, best first and at most
+three: candidates with scores, not chosen answers. `fill` always lists it on exit 3, for the
+first failed marker, and `data.markers[].shortlist` per marker (null on a resolved marker,
+empty when the marker scored nothing); `pick` lists it the same way, `why` with `line` added,
+and the MCP tools carry it in `structuredContent`.
+Exit 3 never authorizes use of a shortlisted handle. `fill` gives `data.reason` for the first
+failed marker in argv order and `data.markers[].reason` per marker.
 `no_match`, `ambiguous`, `unsure_flag` and `insufficient_evidence` are reasons, not error kinds;
 `error` is null on abstention.
 
@@ -114,7 +121,8 @@ separately. Do not retry uncertainty until it agrees.
 
 - `quota_exhausted` (4): TypeSafe credits or the free budget are spent. No automatic retry.
   classifier.dev allows $0.50 per IP per UTC day, subject to $100 per day across everyone and
-  four concurrent requests; no fixed daily classification count is promised.
+  four concurrent requests; no fixed daily classification count is promised. The hint names
+  the key page, <https://console.typesafe.ai/keys>, as `health` does in `data.key_url`.
 - `input_too_large` (6): includes a per-request spending limit. Reduce request size.
 - `api_unavailable` (4): transport or service failure; retries remain bounded by the deadline.
 - `api_deadline` (4): the overall `JEVIFY_DEADLINE` budget expired; split work or raise it.
@@ -154,6 +162,17 @@ stderr, and remain unsure in `filter` without a model request. The path can stil
 be a candidate even when its content is withheld. [Privacy](../PRIVACY.md) states the checks.
 
 Compare `why.considered` with `why.total`; incomplete evidence cannot prove a whole-log verdict.
+`is` abstains on oversized context. `add` rejects oversized hunks and stages only selected
+tracked hunks. Noninteractive `add` without `--yes` or `--dry-run` exits 2; interactive decline
+is 130. A failed `git apply --cached` stages nothing. Authorization belongs to the caller.
+
+### `is` as a claim check
+
+`jevify is '<claim>' --context <log>` answers whether the log establishes a claim an agent is
+about to act on ("all tests pass", "the failure is in X"): yes (0) when the log establishes it,
+no (1) when it contradicts the claim or leaves it open, 3 when unsure. On 20 such claims against
+11 real logs, 20 of 20 with no false yes ([claim check](../benchmarks/claim-check.md)); counts
+and arithmetic are not its job.
 
 ### `why --hook HOST`: the tool hook
 
@@ -167,10 +186,14 @@ prints nothing when the output has fewer than `--min-lines` lines (default 80,
 `JEVIFY_HOOK_MIN_LINES`), the command succeeded or was interrupted, the payload is not that
 shape, `why` abstains, the backend fails, or 20 seconds pass. It always exits 0, never blocks the
 tool call, and takes the usual `-C` and `--no-save`. The plugin's `hooks/why-on-fail.sh` is this
-one command.
-`is` abstains on oversized context. `add` rejects oversized hunks and stages only selected
-tracked hunks. Noninteractive `add` without `--yes` or `--dry-run` exits 2; interactive decline
-is 130. A failed `git apply --cached` stages nothing. Authorization belongs to the caller.
+one command. Codex reads the same hook shape from `~/.codex/hooks.json` or the repository's
+`.codex/hooks.json`, on `PostToolUse` (it has no `PostToolUseFailure`), and `--hook codex`
+prints nothing when the command succeeded:
+
+```json
+{"hooks": {"PostToolUse": [{"matcher": "Bash",
+  "hooks": [{"type": "command", "command": "jevify why --hook codex", "timeout": 30}]}]}}
+```
 
 ## Telemetry
 

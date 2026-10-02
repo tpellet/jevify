@@ -21,7 +21,8 @@ Build from `main` with `cargo install --git https://github.com/tpellet/jevify --
 Without a key, jevify asks [classifier.dev](https://classifier.dev), which serves Jev free and
 without an account: $0.50 per IP per UTC day, shared by everyone behind that IP, subject to
 $100 per day across everyone and four concurrent requests. The free tier is for trying jevify;
-CI and sustained or team use need a TypeSafe key, which uses your own credits:
+CI and sustained or team use need a TypeSafe key from <https://console.typesafe.ai/keys>,
+which uses your own credits:
 
 ```sh
 export TYPESAFE_API_KEY_FILE=/path/to/key
@@ -44,7 +45,10 @@ The fixtures live in [docs/demo](../demo) of the repository; `bash docs/demo/exa
 runs the local fixture examples.
 
 Find the error in a failed build. On a live build, pipe both streams, since compilers write
-errors to stderr: `cargo build 2>&1 | jevify why`.
+errors to stderr: `cargo build 2>&1 | jevify why`. The transcripts on this page run on the
+keyless backend (`windows 13` is its window count over 1,212 candidates; TypeSafe uses larger
+windows); the check in `tests/transcripts.rs` compares the decision and the chosen item on both
+backends, never the probability.
 
 ```console
 $ jevify why < docs/demo/build.log
@@ -105,11 +109,14 @@ $ jevify is 'asks for a refund' < docs/demo/mail.txt && echo refund
 refund
 ```
 
-Find the file that does something, among the files of a repository:
+Find the file that does something, among the files of a repository. This one is on TypeSafe
+(`windows 3` over 451 files); the keyless backend abstains on it, exit 3 and nothing on
+stdout: its shortlist puts `src/cli.rs` first at 0.9, but its check that any candidate fits
+scores 0.12, under the threshold.
 
 ```console
 $ git ls-files | jevify pick --files 'where the command-line flags are defined'
-jevify pick: candidates 319, windows 4
+jevify pick: candidates 451, windows 3
 jevify pick: excerpts withheld: 0
 src/cli.rs
 ```
@@ -166,6 +173,19 @@ and stops on doubt. Several markers resolve together; if one fails, nothing runs
 role per call: the lines of `@{-:…}`, or the context of `one` and `flag`; the other side comes
 from `--candidates FILE` or `--context FILE`.
 
+The listing a test runner prints is a supplied list too. The names are the evidence, the chosen
+name is the handle, and the command is the runner's own; `--exact` after the second `--` makes
+the name a whole-name filter in every test binary:
+
+```sh
+cargo test -- --list 2>/dev/null | sed -n 's/: test$//p' \
+  | jevify fill -- cargo test '@{-:a 429 response is retried and the answer is cached}' -- --exact
+pytest --collect-only -q | sed -n '/::/p' | jevify fill -- pytest '@{-:the backoff is capped at the maximum}'
+```
+
+[The recipe](../../benchmarks/test-by-behaviour.md) has the Go form and a 50-behaviour gold set:
+43 of the 45 behaviours with a test run that test, the rest run nothing.
+
 `pick --from KIND` gives you the handle without a command:
 
 ```sh
@@ -182,7 +202,10 @@ jevify pick --from tool 'keep my mac awake for an hour'
 ```
 
 The `tool` kind selects from PATH summaries and finalist man-page evidence. It prints a
-handle and starts no user command. `jevify init agents` prints instructions for an agent.
+handle and starts no user command. `jevify init agents` prints instructions for an agent;
+`claude mcp add jevify -- jevify mcp` serves `why`, `is` and `pick` as MCP tools, and
+`jevify why --hook claude` (or `codex`) is the body of an agent's failed-command hook
+([Agents](agents.md#failure-integrations)).
 
 ## Scripting on exit codes
 
@@ -197,7 +220,19 @@ jevify is 'asks for a refund' --context mail.txt
 Exit 0 means all yes, 1 at least one no, 3 unsure. `&&` acts on 0 only; use `case` when no,
 unsure and backend errors need different handling. Check a `pick` call's exit code before its
 output becomes an argument: on abstention the output is empty, and an empty argument is one
-that many commands accept.
+that many commands accept. The same call checks a claim against a log before acting on it,
+`jevify is 'all tests pass' --context test.log`: yes means the log establishes it
+([claim check](../../benchmarks/claim-check.md), 20 of 20 with no false yes).
+
+Every error prints a hint and a command to run next; `--json` carries them as `error.hint` and
+`error.example`:
+
+```text
+$ jevify why < /dev/null
+jevify why: error: no input: stdin was empty
+  hint: why reads the failing command's output on stdin; compilers write errors to stderr
+  try:  cargo test 2>&1 | jevify why
+```
 
 The codes are 0 ok, 1 no, 2 usage, 3 abstain, 4 unavailable, 5 auth, 6 input and
 130 declined at the `add` confirmation. [Verbs](verbs.md) lists the data and flags of each

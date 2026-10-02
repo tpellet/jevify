@@ -94,15 +94,22 @@ in its top three in 31. The first-line run points at a wrong line in four and ab
 `tail -n 50` contains the gold diagnostic in 10 cases; a five-line grep baseline contains it
 in 11. Median `why` latency is 0.87 seconds on a loaded machine.
 
-The downstream agent receives 99.76% fewer estimated tokens in aggregate, comparing complete
-JSON stdout with full failed-job logs. This is a payload measurement, not total inference cost
-or agent task success; large logs dominate it. The purposive sample, gold labels and failures
-are in [benchmarks/why-ci.md](../../benchmarks/why-ci.md).
+This is a development-set retrieval measurement, not agent task success. The purposive sample,
+gold labels and failures are in [benchmarks/why-ci.md](../../benchmarks/why-ci.md). From the
+line `why` points at, a `@{one:compile|test|flaky|infra:…}` marker puts 26 of the 34 runs in
+their hand-labelled class, abstains on 4 and is wrong on 4
+([why-triage.md](../../benchmarks/why-triage.md)).
 
 Measured the same day on TypeSafe: in sharkdp/bat, the description “keeps the grid aligned when
 a tab follows a multibyte character” resolves PR #4018 among 1,000 open and closed PRs in
-6.9 seconds, 424× fewer bytes than the listing. One successful lookup does not establish a
-success rate for all descriptions.
+6.9 seconds. On 20 agent requests for commits, branches, files, PRs and supplied CI runs across
+three repositories, `fill` gives 17 right answers, 2 abstentions and no wrong handle
+([fill-sample.md](../../benchmarks/fill-sample.md)); on 50 behaviours against two test listings
+it runs the right test for 43 of 45 and a wrong one for none
+([test-by-behaviour.md](../../benchmarks/test-by-behaviour.md)); `is` checks 20 of 20 agent
+claims against real logs with no false yes ([claim-check.md](../../benchmarks/claim-check.md)).
+Uncached p50 wall time on TypeSafe is 0.51 s for `why` on an 1,812-line log, 0.23 s for `is`
+and 0.24 s for `fill` on a supplied list ([latency.md](../../benchmarks/latency.md)).
 
 Repeated questions can differ. Measured 2026-09-24 at 0.11.0 on a fixed subset with the cache
 off, five cold reruns change 1.6% of answers; eight candidate orders change 5.0%. Most movement

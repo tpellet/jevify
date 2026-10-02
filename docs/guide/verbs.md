@@ -54,9 +54,10 @@ the newest candidates and report coverage; unordered overflow is `too_many` (exi
 A lister's failure, output overflow or deadline is an error, never a partial list.
 [Kinds](kinds.md) defines recipes, evidence and limits.
 
-Data: `argv`, `reason`, `markers[{arg,kind,reason,handle,p,candidates,total,omitted}]`.
+Data: `argv`, `reason`, `markers[{arg,kind,reason,handle,p,candidates,total,omitted,shortlist}]`.
 Exit 3 has `error: null`: reasons include `no_match`, `ambiguous`, `unsure_flag` and
-`insufficient_evidence`. `reason` names the first failed marker in argv order.
+`insufficient_evidence`. `reason` names the first failed marker in argv order, and `shortlist`
+its nearest candidates, `[{text,p}]`, best first; each marker carries its own.
 `fill` refuses non-Jev answers, including missing model names, with exit 4 even in a dry run.
 
 Exits 2–6 before execution mean nothing ran. After execution the command owns its exit code.
@@ -93,12 +94,16 @@ Exit 0 found, 3 abstained, plus common errors.
 ```sh
 gh run view <id> --log-failed | jevify why
 cargo test 2>&1 | jevify why -n 3
+jevify why --hook claude
 ```
 
-`why [-C N] [-n N] [--no-save]` reads a log and prints numbered causes with context.
-`-C` is context lines here, not a repository directory. It accepts no record split or file
-options. Selection uses bounded, filtered evidence; compare `considered` with `total`.
-A selected cause does not establish a verdict about unseen lines.
+`why [-C N] [-n N] [--no-save] [--hook claude|codex] [--min-lines N]` reads a log and prints
+numbered causes with context. `-C` is context lines here, not a repository directory. It
+accepts no record split or file options. Selection uses bounded, filtered evidence; compare
+`considered` with `total`. A selected cause does not establish a verdict about unseen lines.
+`--hook HOST` reads an agent's tool-result payload instead and prints the hook JSON with the
+pointed line when the failed output has at least `--min-lines` lines (default 80), otherwise
+nothing; it always exits 0 ([Robot mode](../ROBOT_MODE.md#why---hook-host-the-tool-hook)).
 
 Data: `causes[{line,text,p,context[]}]`, `shortlist`, `any`, `considered`, `total`, `hint`,
 `saved_input`, `complete`. Exit 0 found, 3 abstained, plus common errors.
@@ -140,6 +145,8 @@ printf 'All tests passed.\n' | jevify is 'the tests passed' && echo ready
 `is '<statement>' ['<statement>' ...] [--context FILE] [--band 0.15]` judges one context.
 One statement prints nothing; several print `VERDICT<TAB>STATEMENT`. Exit 0 all yes, 1 any no,
 3 otherwise. `--band` accepts 0 through 0.5. Oversized context abstains before inference.
+With a log as context and a claim as the statement, yes means the log establishes the claim
+([claim check](../../benchmarks/claim-check.md)).
 Data for one: `p`, `verdict`, `truncated`; for several: `statements[{statement,verdict,p}]`,
 aggregate `verdict`, `truncated`. Oversized input adds `reason` and null probabilities.
 
@@ -167,11 +174,13 @@ files stay unsure in `filter`. See [Privacy](../../PRIVACY.md).
 | Command | Data | Exit |
 |:---|:---|:---|
 | `jevify capabilities --json` | Compact commands, flags, exits, error kinds, environment and kinds | 0 |
-| `jevify health --json` | `backend`, `base_url`, `key`, `api`, `latency_ms`, `model` | 0, 4, 5 |
+| `jevify health --json` | `backend`, `base_url`, `key`, `key_url`, `api`, `latency_ms`, `model` | 0, 4, 5 |
 | `jevify init agents` | Instruction block in `script` | 0 |
+| `jevify mcp` | A stdio MCP server with `why`, `is` and `pick` as tools | 0 |
 
 `health` makes a small uncached classification, so it detects quota or credit exhaustion.
-`init agents` prints instructions and edits no files.
+`init agents` prints instructions and edits no files. `mcp` answers JSON-RPC on stdin until it
+closes ([Robot mode](../ROBOT_MODE.md#the-mcp-server)).
 
 ## Common exit codes
 

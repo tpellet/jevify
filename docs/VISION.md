@@ -49,8 +49,8 @@ the executed command's own exit status.
 
 ## Small, composable operations
 
-`pick` selects records, `filter` keeps matching and unsure records, `label` prefixes labels,
-and `is` returns a predicate's exit code. `add` stages selected tracked hunks only with caller
+`pick` selects records, `filter` keeps matching and unsure records or prefixes labels
+(`--label`), and `is` returns a predicate's exit code. `add` stages selected tracked hunks only with caller
 authorization. Ordinary `sort`, `awk`, `jq` and `grep` do counting, arithmetic and literal work.
 
 Human output carries records and handles; diagnostics go to stderr. `pick` and `filter`
@@ -78,13 +78,14 @@ everyone and four concurrent requests. TypeSafe uses the caller's credits. Spent
 ## Prove the useful cases
 
 On 2026-09-28, TypeSafe puts the root-cause line first in 30 of 34 failed GitHub Actions runs
-from 30 public repositories, and points at a wrong line in four. The
-[benchmark](../benchmarks/why-ci.md) defines the sample, labels and baselines. Its output token
-saving measures the payload an agent reads, not agent task success or total inference cost.
+from 30 public repositories, and points at a wrong line in four; `grep | tail` keeps a gold
+line in 11. The [benchmark](../benchmarks/why-ci.md) defines the sample, labels and baselines;
+it measures retrieval, not agent task success.
 
-On the same date, TypeSafe resolves bat PR #4018 among 1,000 open and closed PRs in 6.9 seconds,
-with 424× fewer bytes than reading the listing. These measurements support particular tasks;
-they do not establish correctness or savings for every verb, backend or workflow.
+On the same date, TypeSafe resolves bat PR #4018 among 1,000 open and closed PRs in 6.9 seconds.
+On 50 described behaviours, `fill` runs the right test for 43 of 45 and a wrong one for none
+([test-by-behaviour.md](../benchmarks/test-by-behaviour.md)). These measurements support
+particular tasks; they do not establish correctness for every verb, backend or workflow.
 
 Real end-to-end cases prove selection behavior. Contract tests protect execution safety,
 redaction, byte preservation, limits, HTTP handling, deadlines, exit codes and the envelope.

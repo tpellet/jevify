@@ -13,7 +13,7 @@ says so.
 | [Getting started](getting-started.md) | Install, keyless access, first commands, tool selection |
 | [Verbs](verbs.md) | `fill`, its markers, `pick --from`, output verbs and utility commands |
 | [Kinds](kinds.md) | Every marker kind, a recipe in one line, where `kinds.jsonl` lives, the status line |
-| [Agents](agents.md) | One machine envelope, exit codes, capabilities and permissions |
+| [Agents](agents.md) | One machine envelope, exit codes, permissions, the hooks, the MCP server and the Action |
 | [How it works](how-it-works.md) | Selection, NONE, thresholds, batching, cache and measurements |
 | [Configuration](configuration.md) | Environment variables, global flags and storage |
 | [FAQ](faq.md) | Cost, privacy, abstention and model limits |

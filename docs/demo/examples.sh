@@ -29,8 +29,8 @@ fill() {
     show "printf 'A crash with no reproduction steps.\n' | jevify fill --dry-run -- printf '%s\n' '@{one:bug|feature|docs:what kind of report is this}' '@{flag:--draft:the report lacks steps to reproduce}'"
 }
 label() {
-    show "jevify label bug,feature,question < $DEMO/issues.txt"
-    show "jevify label bug,feature,question < $DEMO/issues.txt | cut -f1 | sort | uniq -c"
+    show "jevify filter --label bug,feature,question < $DEMO/issues.txt"
+    show "jevify filter --label bug,feature,question < $DEMO/issues.txt | cut -f1 | sort | uniq -c"
     show "jevify filter 'reports a crash' < $DEMO/issues.txt"
 }
 nothing_fits() {
