@@ -1,0 +1,51 @@
+id	repo	behaviour	gold
+j01	jevify	a secret file's content never leaves the machine when fill reads file excerpts	file_finals_read_excerpts_and_secret_files_never_leave_the_machine
+j02	jevify	a 429 response is retried and the answer is cached	a_429_is_retried_and_the_answer_is_cached
+j03	jevify	a redirect never receives the key or the evidence	redirects_never_receive_key_or_evidence
+j04	jevify	the TypeSafe key is never sent to the keyless backend	the_typesafe_key_never_reaches_the_keyless_backend
+j05	jevify	each HTTP status maps to an exit code and an error kind	http_statuses_map_to_exit_codes_and_kinds
+j06	jevify	an unsure flag marker runs nothing	a_flag_is_kept_or_removed_and_an_unsure_flag_runs_nothing
+j07	jevify	the status file records whether the command ran	the_status_file_says_whether_the_command_ran
+j08	jevify	a commit handle is the full oid and a long history keeps the newest commits	a_commit_is_a_full_oid_and_a_long_history_keeps_the_newest
+j09	jevify	git -C inside the wrapped command decides where the listers run	git_dash_c_in_the_command_is_where_the_listers_run
+j10	jevify	why points at the root cause and prints its context lines	points_at_the_root_cause_with_context
+j11	jevify	why on a log without any failure signal exits 3 with a hint	no_signal_on_stdin_is_exit_3_with_a_hint
+j12	jevify	pick abstains on a near tie between two stdin records	stdin_near_tie_abstains_without_printing_a_record
+j13	jevify	pick --from branch prints the local handle when a remote twin exists	from_branch_remote_twin_uses_local_handle
+j14	jevify	label prints a question mark for unsure records, ties and none	unsure_records_ties_and_none_are_question_marks
+j15	jevify	label refuses more labels than the window holds before any request	label_count_is_checked_against_the_window_before_any_request
+j16	jevify	filter returns each line byte-exact after the first tab	lines_come_back_byte_exact_after_the_first_tab
+j17	jevify	is keeps several statements in order and aggregates them into one verdict	statements_keep_their_order_and_aggregate_the_verdict
+j18	jevify	is with --context FILE replaces stdin and a bad file makes no request	context_file_replaces_stdin_and_its_errors_make_no_requests
+j19	jevify	add stages only the hunks that match the topic	stages_only_matching_hunks
+j20	jevify	add on a clean tree is an input error with a hint	clean_tree_is_an_input_error_with_a_hint
+j21	jevify	a person declining at the add prompt stages nothing	terminal_decline_and_apply_rejection_stage_nothing
+j22	jevify	health exits 5 without a key	health_is_5_without_a_key_and_0_after_uncached_classification
+j23	jevify	health reports billing, quota and auth errors	health_reports_billing_quota_and_auth_errors
+j24	jevify	when the daily quota runs out the already answered prefix is kept	daily_quota_keeps_the_answered_prefix
+j25	jevify	the deadline cancels a request that is still in flight	the_deadline_cancels_a_request_in_flight
+j26	jevify	a usage error is exit 2 with one envelope and a corrected example	usage_errors_are_exit_2_and_one_envelope_with_a_corrected_example
+j27	jevify	verb options written before the verb still belong to the verb	verb_options_before_the_verb_are_read_as_the_verbs
+j28	jevify	clap errors keep non-UTF-8 arguments intact	clap_errors_preserve_non_utf8_args_and_stop_format_scanning_at_double_dash
+j29	jevify	the binary never reads the platform configuration directory	bin_never_reads_the_platform_configuration_directory
+j30	jevify	a tool is chosen from the inventory and man pages without running it	tool_kind_uses_inventory_and_man_evidence_without_running_the_tool
+j31	jevify	a man process that sleeps is killed at the deadline	manpage::tests::a_sleeping_man_is_killed_at_the_deadline_and_a_quick_one_is_read
+j32	jevify	secrets are redacted while ordinary tokens survive	input::tests::secrets_are_redacted_and_ordinary_tokens_survive
+j33	jevify	a doubled @@ keeps its bytes and only the escape is decoded	marker::tests::literal_table_preserves_bytes_and_decodes_only_the_escape
+j34	jevify	the release script refuses a version that is already tagged	release_refuses_unverified_or_existing_versions_before_tagging
+j35	jevify	the documented transcripts still answer as the pages show on TypeSafe	transcripts_still_answer_as_the_pages_show_on_typesafe
+j36	jevify	pruning old saved inputs never removes the outputs directory itself	save::tests::pruning_never_leaves_the_outputs_directory
+j37	jevify	jevify refuses to run when the system clock is behind	NONE
+j38	jevify	a Windows path with a drive letter is normalized	NONE
+j39	jevify	an HTTPS_PROXY variable routes requests through the proxy	NONE
+j40	jevify	the answer cache is encrypted at rest	NONE
+h01	hyperfine	benchmarks run one after another, never interleaved	benchmarks_are_executed_sequentially
+h02	hyperfine	the reference command runs before the other commands	reference_is_executed_first
+h03	hyperfine	a failing command passes with the ignore-failure option	can_run_failing_commands_with_ignore_failure_option
+h04	hyperfine	outliers are detected when the MAD is zero	outlier_detection::test_detect_outliers_if_mad_becomes_0
+h05	hyperfine	results export as CSV	export::csv::test_csv
+h06	hyperfine	the shell spawning time counts when computing the number of runs	takes_shell_spawning_time_into_account_for_computing_number_of_runs
+h07	hyperfine	a parameter scan over decimal values	command::test_parameter_scan_commands_decimal
+h08	hyperfine	the default shell on this platform	options::test_default_shell
+h09	hyperfine	a missing stdin data file is an error	fails_if_invalid_stdin_data_file_provided
+h10	hyperfine	results export as a PNG chart	NONE

@@ -34,6 +34,7 @@ only to choose from it by eye.
 | A failed CI run by description | `jevify fill -- gh run view --log-failed '@{ci-run:the failed run on tag v0.7.0}' \| jevify why` | The run's log, then its cause |
 | A file or PR by description | `jevify fill -- cat '@{file:parses the marker}'`, `jevify fill -- gh pr view '@{pr:the Windows path fix}'` | A real path or number, then the command |
 | A tool can list the needed value | `git log --oneline \| jevify fill -- git revert '@{-:the pricing change}'` | A handle from a supplied record |
+| Run the one test you can describe | `cargo test -- --list 2>/dev/null \| sed -n 's/: test$//p' \| jevify fill -- cargo test '@{-:what the test checks}' -- --exact` | That test runs; exit 3 runs nothing (`benchmarks/test-by-behaviour.md`: 43/50 hit, 0 wrong) |
 | Want the value without the run | `jevify pick --from branch 'the auth refactor'` | A handle, or abstention |
 | An option depends on text you have not read | `jevify fill --context report.md -- gh issue create --label '@{one:bug\|feature\|docs:what kind of report}'` | A caller-written option; `'@{flag:--draft:question}'` for a conditional flag |
 | A failed build has more than about 50 lines, or grep finds only the symptom | `cargo test 2>&1 \| jevify why` | A cause with line number and context; read that, not the whole log |
@@ -107,6 +108,8 @@ jevify fill --dry-run -- git switch '@{branch:the auth refactor}'
 jevify fill --dry-run -- git revert '@{commit:made folder moves atomic}'
 jevify fill --dry-run -- cat 'src/@{file:parses the marker}'
 printf 'retry_backoff\nparse_header\n' | jevify fill --dry-run -- cargo test '@{-:the retry test}'
+cargo test -- --list 2>/dev/null | sed -n 's/: test$//p' | jevify fill -- cargo test '@{-:a 429 is retried}' -- --exact
+pytest --collect-only -q | sed -n '/::/p' | jevify fill -- pytest '@{-:a 429 is retried}'
 printf 'A crash with no reproduction steps.\n' | jevify fill --dry-run -- printf '%s\n' \
   '@{one:bug|feature|docs:what kind of report is this}' '@{flag:--draft:the report lacks steps to reproduce}'
 jevify pick --from branch 'the auth refactor'

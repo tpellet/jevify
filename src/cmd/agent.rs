@@ -148,6 +148,8 @@ pub fn init(_shell: Shell) -> Outcome {
          jevify fill --dry-run -- git show '@{commit:what it did}'\n\
          jevify pick --from commit 'what it did'\n\
          --from also accepts branch, file, pr, ci-run; stdout is the handle.\n\
+         cargo test -- --list 2>/dev/null | sed -n 's/: test$//p' | jevify fill -- cargo test '@{-:what the test checks}' -- --exact\n\
+         pytest --collect-only -q | sed -n '/::/p' | jevify fill -- pytest '@{-:what the test checks}'\n\
          cat records.txt | jevify filter 'reports a failed assertion'\n\
          cat records.txt | jevify label bug,feature,question\n\
          jevify is 'reports a failure' < build.log\n\

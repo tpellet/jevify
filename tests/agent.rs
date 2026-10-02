@@ -271,6 +271,8 @@ fn init_agents_prints_one_screen_of_instructions_in_human_and_json() {
         "jevify filter",
         "jevify label",
         "jevify is 'reports a failure' < build.log",
+        "cargo test -- --list 2>/dev/null | sed -n 's/: test$//p' | jevify fill -- cargo test '@{-:",
+        "-- --exact",
     ] {
         assert!(text.contains(command), "{command}");
     }
