@@ -346,10 +346,163 @@ pub async fn run(
     if top == 0 {
         return Err(JevifyError::Usage("-n must be at least 1".into()));
     }
+    let bytes = tokio::task::spawn_blocking(crate::input::read_stdin_bytes)
+        .await
+        .map_err(|e| JevifyError::Input(e.to_string()))??;
+    analyse(ctx, bytes, context, top, no_save).await
+}
+
+/// `why` on output already in hand, with the verb's usual budget: the stdin verb and the MCP
+/// `why` tool start here.
+pub async fn analyse(
+    ctx: &Config,
+    bytes: Vec<u8>,
+    context: usize,
+    top: usize,
+    no_save: bool,
+) -> Result<Outcome, JevifyError> {
     let client = Client::new(ctx)?;
+    analyse_with(ctx, &client, bytes, context, top, no_save).await
+}
+
+/// The budget of a hook run: an agent waits for its hook, so a cause that takes longer is
+/// not worth the wait and the hook prints nothing.
+pub const HOOK_BUDGET: std::time::Duration = std::time::Duration::from_secs(20);
+/// The most characters of one context line a hook's `additionalContext` carries.
+const HOOK_LINE: usize = 300;
+
+/// `why` as a coding agent's tool hook (`--hook claude|codex`): the agent's tool-result
+/// payload comes as JSON on stdin and the answer goes back as hook JSON on stdout. The hook
+/// prints nothing, and still exits 0, whenever there is nothing to add: a payload that is not
+/// a failed `Bash` command, an interrupted command, an output shorter than `min_lines`, an
+/// abstention, a backend error, or the `HOOK_BUDGET` passing. A hook must never break the
+/// session, so no error leaves this function.
+pub async fn hook(ctx: &Config, min_lines: usize, context: usize, no_save: bool) -> Outcome {
+    let silent = Outcome {
+        exit: Exit::Ok,
+        data: serde_json::Value::Null,
+        human: Vec::new(),
+        exec: None,
+    };
+    let Ok(Ok(payload)) = tokio::task::spawn_blocking(crate::input::read_stdin_bytes).await else {
+        return silent;
+    };
+    let Some((event, text)) = failed_output(&payload) else {
+        return silent;
+    };
+    let lines = text.lines().count();
+    if lines < min_lines {
+        return silent;
+    }
+    let Ok(client) = Client::new(ctx).map(|c| c.with_budget(HOOK_BUDGET)) else {
+        return silent;
+    };
+    let Ok(out) = analyse_with(ctx, &client, text.into_bytes(), context, 1, no_save).await else {
+        return silent;
+    };
+    let Some(answer) = hook_context(&out, lines) else {
+        return silent;
+    };
+    let json = serde_json::json!({"hookSpecificOutput": {"hookEventName": event, "additionalContext": answer}});
+    let mut human = json.to_string().into_bytes();
+    human.push(b'\n');
+    Outcome {
+        exit: Exit::Ok,
+        data: serde_json::Value::Null,
+        human,
+        exec: None,
+    }
+}
+
+/// The hook event and the output of the failed `Bash` command in a Claude Code or Codex
+/// hook payload; none when the payload says anything else. `PostToolUseFailure` carries the
+/// output in `error` behind an `Exit code N` line; `PostToolUse` carries `tool_response` with
+/// `stdout`, `stderr` and `exit_code` (a string when the host passes the model-facing text).
+fn failed_output(payload: &[u8]) -> Option<(String, String)> {
+    let v: serde_json::Value = serde_json::from_slice(payload).ok()?;
+    if v["tool_name"].as_str()? != "Bash" || v["is_interrupt"].as_bool() == Some(true) {
+        return None;
+    }
+    let event = v["hook_event_name"]
+        .as_str()
+        .unwrap_or("PostToolUseFailure");
+    let text = if let Some(error) = v["error"].as_str() {
+        let stripped = error
+            .strip_prefix("Exit code ")
+            .and_then(|rest| rest.split_once('\n'))
+            .filter(|(code, _)| !code.is_empty() && code.bytes().all(|b| b.is_ascii_digit()))
+            .map_or(error, |(_, output)| output);
+        stripped.to_owned()
+    } else {
+        let response = &v["tool_response"];
+        if response["interrupted"].as_bool() == Some(true)
+            || response["exit_code"].as_i64().is_some_and(|code| code == 0)
+        {
+            return None;
+        }
+        match response {
+            serde_json::Value::String(text) => text.clone(),
+            serde_json::Value::Object(fields) => {
+                let part = |key: &str| fields.get(key).and_then(|f| f.as_str()).unwrap_or("");
+                let output = part("output");
+                let stdout = part("stdout");
+                let stderr = part("stderr");
+                if output.is_empty() {
+                    match (stdout.is_empty(), stderr.is_empty()) {
+                        (false, false) => format!("{}\n{stderr}", stdout.trim_end_matches('\n')),
+                        (false, true) => stdout.to_owned(),
+                        (true, _) => stderr.to_owned(),
+                    }
+                } else {
+                    output.to_owned()
+                }
+            }
+            _ => return None,
+        }
+    };
+    (!text.trim().is_empty()).then(|| (event.to_owned(), text))
+}
+
+/// The `additionalContext` of a found cause: which line of how many, where the output is
+/// saved, and the cause's context block with the cause marked. None on an abstention.
+fn hook_context(out: &Outcome, lines: usize) -> Option<String> {
+    if out.exit != Exit::Ok {
+        return None;
+    }
+    let cause = out.data["causes"].as_array()?.first()?;
+    let line = cause["line"].as_u64()?;
+    let excerpt = cause["context"]
+        .as_array()?
+        .iter()
+        .map(|l| {
+            let n = l["line"].as_u64().unwrap_or(0);
+            let mark = if n == line { ">" } else { " " };
+            let text = crate::tournament::clip(l["text"].as_str().unwrap_or_default(), HOOK_LINE);
+            format!("{mark}{n:>6} │ {text}")
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let saved = match out.data["saved_input"].as_str() {
+        Some(path) => format!("output saved at {path}"),
+        None => "output not saved".to_owned(),
+    };
+    Some(format!(
+        "jevify why points at line {line} of the {lines} output lines of this failed command as the cause ({saved}):\n{excerpt}"
+    ))
+}
+
+/// The analysis of one command's output, already read, on the given client: `why` proper,
+/// shared by `analyse` and the hook, whose client carries the hook budget.
+async fn analyse_with(
+    ctx: &Config,
+    client: &Client,
+    bytes: Vec<u8>,
+    context: usize,
+    top: usize,
+    no_save: bool,
+) -> Result<Outcome, JevifyError> {
     let directory = crate::config::saved_input_dir(no_save);
     let (lines, saved) = tokio::task::spawn_blocking(move || {
-        let bytes = crate::input::read_stdin_bytes()?;
         let saved = crate::save::save(&bytes, directory.as_deref());
         let lines: Vec<String> = String::from_utf8_lossy(&bytes)
             .lines()
@@ -411,7 +564,7 @@ pub async fn run(
     // Independent jobs share the client's concurrency limit and never compete for a cause.
     let results = futures::future::try_join_all(
         jobs.iter()
-            .map(|(_, numbers, text)| rank_job(ctx, &client, text, numbers)),
+            .map(|(_, numbers, text)| rank_job(ctx, client, text, numbers)),
     )
     .await?;
     let matrix = jobs.len() > 1;

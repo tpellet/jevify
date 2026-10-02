@@ -449,8 +449,24 @@ async fn dispatch(cli: &Cli, ctx: &config::Config) -> Result<cmd::Outcome, Jevif
         }
         Cmd::Why {
             context,
+            no_save,
+            hook: Some(_),
+            min_lines,
+            ..
+        } => {
+            if machine {
+                return Err(JevifyError::Usage(
+                    "--hook prints the host's hook JSON itself; drop --json".into(),
+                ));
+            }
+            Ok(cmd::why::hook(ctx, *min_lines, *context, *no_save).await)
+        }
+        Cmd::Why {
+            context,
             top,
             no_save,
+            hook: None,
+            ..
         } => cmd::why::run(ctx, *context, *top, *no_save).await,
         Cmd::Filter {
             statement,

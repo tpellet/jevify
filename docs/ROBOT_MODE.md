@@ -145,6 +145,20 @@ stderr, and remain unsure in `filter` and `label` without a model request. The p
 be a candidate even when its content is withheld. [Privacy](../PRIVACY.md) states the checks.
 
 Compare `why.considered` with `why.total`; incomplete evidence cannot prove a whole-log verdict.
+
+### `why --hook HOST`: the tool hook
+
+`jevify why --hook claude` (or `codex`) is the body of an agent's tool hook, in place of `--json`.
+It reads the host's `PostToolUseFailure` or `PostToolUse` payload for the `Bash` tool on stdin,
+takes the failed command's output from `error` (behind its `Exit code N` line) or from
+`tool_response{stdout,stderr,exit_code}`, and prints one object,
+`{hookSpecificOutput: {hookEventName, additionalContext}}`, where `additionalContext` names the
+pointed line, the output's line count, the saved-output path and the cause's context block. It
+prints nothing when the output has fewer than `--min-lines` lines (default 80,
+`JEVIFY_HOOK_MIN_LINES`), the command succeeded or was interrupted, the payload is not that
+shape, `why` abstains, the backend fails, or 20 seconds pass. It always exits 0, never blocks the
+tool call, and takes the usual `-C` and `--no-save`. The plugin's `hooks/why-on-fail.sh` is this
+one command.
 `is` abstains on oversized context. `add` rejects oversized hunks and stages only selected
 tracked hunks. Noninteractive `add` without `--yes` or `--dry-run` exits 2; interactive decline
 is 130. A failed `git apply --cached` stages nothing. Authorization belongs to the caller.

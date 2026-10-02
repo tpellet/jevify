@@ -111,7 +111,7 @@ pub enum Cmd {
     },
     /// Find the line that caused a failure in build, test or CI output on stdin
     #[command(
-        after_help = "Examples:\n  cargo build 2>&1 | jevify why\n  gh run view --log-failed | jevify why --json\n\nPipe 2>&1: compilers write errors to stderr. Prints numbered context; takes no split option. Saves raw input, secrets included, for seven days, unless --no-save or JEVIFY_NO_SAVE=1 (JEVIFY_NO_CACHE does not stop it); stderr names the full output path.\nExit: 0 found, 3 no line looks like a failure. --json data: causes[{line, text, p, context[]}], any, considered, total, hint, saved_input, complete. A skipped or failed save sets complete: false."
+        after_help = "Examples:\n  cargo build 2>&1 | jevify why\n  gh run view --log-failed | jevify why --json\n  jevify why --hook claude   # from a Claude Code or Codex hook on Bash\n\nPipe 2>&1: compilers write errors to stderr. Prints numbered context; takes no split option. Saves raw input, secrets included, for seven days, unless --no-save or JEVIFY_NO_SAVE=1 (JEVIFY_NO_CACHE does not stop it); stderr names the full output path.\nExit: 0 found, 3 no line looks like a failure. --json data: causes[{line, text, p, context[]}], any, considered, total, hint, saved_input, complete. A skipped or failed save sets complete: false.\n--hook HOST reads the agent's tool-result payload (PostToolUseFailure or PostToolUse, tool Bash) on stdin and prints {hookSpecificOutput: {hookEventName, additionalContext}} with the pointed line when the command failed with at least --min-lines lines of output and a cause is found within 20 seconds; otherwise it prints nothing. It always exits 0 and never blocks the agent."
     )]
     Why {
         /// Lines of context around the root cause
@@ -123,6 +123,17 @@ pub enum Cmd {
         /// Do not save the full input
         #[arg(long)]
         no_save: bool,
+        /// Run as HOST's tool hook: read the tool-result JSON on stdin, print hook JSON, exit 0
+        #[arg(long, value_name = "HOST")]
+        hook: Option<Hook>,
+        /// With --hook: judge a failed output only when it has at least N lines
+        #[arg(
+            long,
+            value_name = "N",
+            default_value_t = 80,
+            env = "JEVIFY_HOOK_MIN_LINES"
+        )]
+        min_lines: usize,
     },
     /// Keep stdin records that satisfy a statement
     #[command(
@@ -273,6 +284,16 @@ fn parse_labels(text: &str) -> Result<Labels, String> {
 #[derive(ValueEnum, Clone, Copy, Debug)]
 pub enum Shell {
     Agents,
+}
+
+/// The coding agents whose tool hooks `why --hook` serves. Both read the same payload (a
+/// `Bash` tool result as JSON on stdin) and take the same `hookSpecificOutput` answer.
+#[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Hook {
+    /// Claude Code: PostToolUseFailure or PostToolUse on Bash
+    Claude,
+    /// Codex: PostToolUse on Bash
+    Codex,
 }
 
 #[cfg(test)]
