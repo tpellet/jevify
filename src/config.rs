@@ -6,6 +6,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
+/// Where a TypeSafe key comes from: the page every quota, key and health message points at.
+pub const KEY_URL: &str = "https://console.typesafe.ai/keys";
+
 /// Which service answers the questions. classifier.dev translates Noul into a two-label
 /// Choice; its relative scores and TypeSafe's absolute Noul have different semantics.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]

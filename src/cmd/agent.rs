@@ -1,6 +1,6 @@
 use crate::cli::Shell;
 use crate::cmd::Outcome;
-use crate::config::{Backend, Config};
+use crate::config::{Backend, Config, KEY_URL};
 use crate::exit::{Exit, JevifyError};
 use crate::jev::client::Client;
 use crate::jev::{Question, Questions};
@@ -44,7 +44,7 @@ pub fn capabilities() -> Outcome {
             {"name":"is", "usage":"jevify is <statement>... [--context FILE] [--band 0.15]", "exit":[0,1,3], "data":"p, verdict, truncated; statements for multiple questions"},
             {"name":"add", "usage":"jevify add [--dry-run | --yes] <topic...>", "exit":[0,2,3,6,130], "data":"hunks[{file,header,p,staged}]"},
             {"name":"capabilities", "usage":"jevify capabilities --json", "exit":[0], "data":"commands, kinds, exit_codes, error_kinds, env, envelope"},
-            {"name":"health", "usage":"jevify health --json", "exit":[0,4,5], "data":"backend, base_url, key, api, latency_ms, model"},
+            {"name":"health", "usage":"jevify health --json", "exit":[0,4,5], "data":"backend, base_url, key, key_url, api, latency_ms, model"},
             {"name":"init", "usage":"jevify init agents", "exit":[0], "data":"script"}
         ],
         "common_exit":[2,4,5,6],
@@ -125,15 +125,19 @@ pub async fn health(ctx: &Config) -> Result<Outcome, JevifyError> {
         Backend::Typesafe => "present",
         Backend::Classifier => "not needed",
     };
+    let key_note = match ctx.backend {
+        Backend::Typesafe => String::new(),
+        Backend::Classifier => format!("; a key from {KEY_URL} lifts the free budget"),
+    };
     Ok(Outcome {
         exit: Exit::Ok,
         human: format!(
-            "ok: {backend} answered with {} in {ms} ms (key {key_state})\n",
+            "ok: {backend} answered with {} in {ms} ms (key {key_state}{key_note})\n",
             answer.model
         )
         .into_bytes(),
         exec: None,
-        data: serde_json::json!({"backend":backend,"base_url":ctx.base_url,"key":key_state,"api":"answered","latency_ms":ms,"model":answer.model}),
+        data: serde_json::json!({"backend":backend,"base_url":ctx.base_url,"key":key_state,"key_url":KEY_URL,"api":"answered","latency_ms":ms,"model":answer.model}),
     })
 }
 

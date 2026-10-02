@@ -449,6 +449,14 @@ async fn spending_errors_distinguish_quota_from_request_size_without_retries() {
             assert!(error.to_string().contains(message), "{error}");
             assert!(error.hint().contains(hint), "{}", error.hint());
             assert!(!error.hint().contains("20,000"));
+            // A spent budget must say where a key comes from.
+            if kind == "quota_exhausted" {
+                assert!(
+                    error.hint().contains(jevify::config::KEY_URL),
+                    "{}",
+                    error.hint()
+                );
+            }
             assert_eq!(server.received_requests().await.unwrap().len(), 1, "{body}");
         }
     }

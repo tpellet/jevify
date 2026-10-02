@@ -723,7 +723,7 @@ fn spending_error(backend: Backend, body: &[u8]) -> Option<JevifyError> {
         {
             Some(JevifyError::quota_exhausted(
                 "TypeSafe account has no credits",
-                "add credits in the TypeSafe console, or set TYPESAFE_API_KEY_FILE to a funded account's key",
+                "add credits at https://console.typesafe.ai/keys, or set TYPESAFE_API_KEY_FILE to a funded account's key",
             ))
         }
         Backend::Classifier
@@ -741,7 +741,7 @@ fn spending_error(backend: Backend, body: &[u8]) -> Option<JevifyError> {
         {
             Some(JevifyError::quota_exhausted(
                 "the free per-IP budget is spent until 00:00 UTC; set TYPESAFE_API_KEY_FILE",
-                "classifier.dev allows $0.50 per IP per UTC day; wait until 00:00 UTC or set TYPESAFE_API_KEY_FILE",
+                "classifier.dev allows $0.50 per IP per UTC day; wait until 00:00 UTC, or get a TypeSafe key at https://console.typesafe.ai/keys and set TYPESAFE_API_KEY_FILE",
             ))
         }
         Backend::Classifier if has_code("request_spending_limit") => {

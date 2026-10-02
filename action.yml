@@ -63,6 +63,13 @@ runs:
             printf '%s\n' "$answer"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+        elif [ "$rc" -eq 4 ]; then
+          echo "::warning title=jevify why::jevify exited 4 (backend unavailable or free budget spent); set typesafe-api-key, key at https://console.typesafe.ai/keys"
+          {
+            echo '### Why it failed'
+            echo
+            echo 'jevify could not classify the log: the backend was unavailable or the free budget is spent. Set the `typesafe-api-key` input; keys come from https://console.typesafe.ai/keys.'
+          } >> "$GITHUB_STEP_SUMMARY"
         elif [ "$rc" -ne 3 ]; then
           echo "::warning title=jevify why::jevify exited $rc; the job summary has no cause"
         fi

@@ -216,14 +216,16 @@ impl JevifyError {
         match self {
             Self::Kinded { hint, .. } => hint,
             Self::MissingKey => {
-                "unset JEVIFY_BACKEND to run keyless through classifier.dev, or create a key at https://console.typesafe.ai/settings/keys and export it in your shell profile; jevify never prints it"
+                "unset JEVIFY_BACKEND to run keyless through classifier.dev, or create a key at https://console.typesafe.ai/keys and export it in your shell profile; jevify never prints it"
             }
-            Self::BadKey(_) => "check the key in the TypeSafe console; `jevify health` verifies it",
+            Self::BadKey(_) => {
+                "check the key at https://console.typesafe.ai/keys; `jevify health` verifies it"
+            }
             Self::Deadline(_) => {
                 "the work was cancelled, not refused: raise JEVIFY_DEADLINE, or split the input into smaller runs"
             }
             Self::Unavailable(_) => {
-                "retry later; classifier.dev's free budget is $0.50 per IP per UTC day, with up to $0.01 per request; narrow the input or set TYPESAFE_API_KEY_FILE"
+                "retry later; classifier.dev's free budget is $0.50 per IP per UTC day, with up to $0.01 per request; narrow the input, or get a TypeSafe key at https://console.typesafe.ai/keys and set TYPESAFE_API_KEY_FILE"
             }
             Self::Protocol(_) => {
                 "the API may have changed, or JEVIFY_BASE_URL points at the wrong server; run `jevify health` and report the issue with `jevify --version`"

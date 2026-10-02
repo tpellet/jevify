@@ -171,6 +171,7 @@ async fn health_is_5_without_a_key_and_0_after_uncached_classification() {
                 if classifier { "classifier" } else { "typesafe" }
             );
             assert_eq!(value["data"]["api"], "answered");
+            assert_eq!(value["data"]["key_url"], jevify::config::KEY_URL);
             assert_eq!(value["data"]["model"], "jev-fake");
             assert!(value["data"]["latency_ms"].is_u64());
             assert_eq!(value["meta"]["requests"], 1);
@@ -246,7 +247,11 @@ async fn health_reports_billing_quota_and_auth_errors() {
         assert_eq!(value["exit_code"], exit);
         assert_eq!(value["ok"], false);
         assert_eq!(value["error"]["kind"], kind);
-        assert!(!value["error"]["hint"].as_str().unwrap().is_empty());
+        let hint = value["error"]["hint"].as_str().unwrap();
+        assert!(!hint.is_empty());
+        if kind == "quota_exhausted" {
+            assert!(hint.contains(jevify::config::KEY_URL), "{hint}");
+        }
     }
 }
 
