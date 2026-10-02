@@ -14,44 +14,62 @@ pub async fn run(
     context: Option<&std::path::Path>,
     band: f64,
 ) -> Result<Outcome, JevifyError> {
-    // Above 0.5 the "no" verdict becomes unreachable at the default threshold.
+    check_band(band)?;
+    let lines = if let Some(path) = context {
+        let path = path.to_owned();
+        tokio::task::spawn_blocking(move || read_context(&path))
+            .await
+            .map_err(|e| JevifyError::Input(e.to_string()))??
+    } else {
+        crate::input::read_stdin_async().await?
+    };
+    judge(ctx, statements, lines, band).await
+}
+
+/// Above 0.5 the "no" verdict becomes unreachable at the default threshold.
+fn check_band(band: f64) -> Result<(), JevifyError> {
     if !(0.0..=0.5).contains(&band) {
         return Err(JevifyError::Usage(format!(
             "--band {band} must be within 0..=0.5"
         )));
     }
+    Ok(())
+}
+
+/// The lines of the `--context` file: a blocking read, within the stdin size limit; a path
+/// holding a line break is the text itself, which the verb reads from stdin instead.
+pub fn read_context(path: &std::path::Path) -> Result<Vec<String>, JevifyError> {
+    use std::io::Read;
+    if path.as_os_str().to_string_lossy().contains('\n') {
+        return Err(JevifyError::Input(
+            "--context takes a file path, not the text: pipe the text on stdin instead".into(),
+        ));
+    }
+    let file = std::fs::File::open(path)
+        .map_err(|e| JevifyError::Input(format!("{}: {e}{}", path.display(), near_paths(path))))?;
+    let mut bytes = Vec::new();
+    file.take(crate::input::MAX_BYTES as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|e| JevifyError::Input(e.to_string()))?;
+    if bytes.len() > crate::input::MAX_BYTES {
+        return Err(JevifyError::InputTooLarge("context exceeds 64 MiB".into()));
+    }
+    let lines = crate::input::split_lines(&String::from_utf8_lossy(&bytes));
+    if lines.iter().all(|line| line.trim().is_empty()) {
+        return Err(JevifyError::EmptyInput("context was empty"));
+    }
+    Ok(lines)
+}
+
+/// Judges the statements against the lines already read: what `run` and the MCP tool share.
+pub async fn judge(
+    ctx: &Config,
+    statements: &[String],
+    lines: Vec<String>,
+    band: f64,
+) -> Result<Outcome, JevifyError> {
+    check_band(band)?;
     let client = Client::new(ctx)?;
-    let lines = if let Some(path) = context {
-        let path = path.to_owned();
-        tokio::task::spawn_blocking(move || {
-            use std::io::Read;
-            if path.as_os_str().to_string_lossy().contains('\n') {
-                return Err(JevifyError::Input(
-                    "--context takes a file path, not the text: pipe the text on stdin instead"
-                        .into(),
-                ));
-            }
-            let file = std::fs::File::open(&path).map_err(|e| {
-                JevifyError::Input(format!("{}: {e}{}", path.display(), near_paths(&path)))
-            })?;
-            let mut bytes = Vec::new();
-            file.take(crate::input::MAX_BYTES as u64 + 1)
-                .read_to_end(&mut bytes)
-                .map_err(|e| JevifyError::Input(e.to_string()))?;
-            if bytes.len() > crate::input::MAX_BYTES {
-                return Err(JevifyError::InputTooLarge("context exceeds 64 MiB".into()));
-            }
-            let lines = crate::input::split_lines(&String::from_utf8_lossy(&bytes));
-            if lines.iter().all(|line| line.trim().is_empty()) {
-                return Err(JevifyError::EmptyInput("context was empty"));
-            }
-            Ok(lines)
-        })
-        .await
-        .map_err(|e| JevifyError::Input(e.to_string()))??
-    } else {
-        crate::input::read_stdin_async().await?
-    };
     let text = crate::input::redact(&lines.join("\n"));
     let max_chars = MAX_CHARS.min(client.backend().max_state_chars());
     // Backend evidence budgets count Unicode characters, not UTF-8 bytes.

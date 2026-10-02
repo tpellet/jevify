@@ -26,6 +26,7 @@ and health requests never follow redirects. The TypeSafe key never goes to class
 | `why` | bounded failure-log selection evidence | lines filtered out locally |
 | `is` | statements and complete supported context | oversized context abstains before inference |
 | `add` | topic and complete unstaged hunks of tracked files | untracked files and content outside the diff; oversized hunks are rejected |
+| `mcp` | per tool call, what the verb sends: `why` the log named by `path` or given as `text`, `is` the statement and the context, `pick` the description and the supplied items or the listed kind's evidence | nothing between calls; no tool starts a user command; the `why` tool saves raw input by the verb's rules |
 | `health` | a small fixed classification probe and TypeSafe key when selected | user text |
 | `capabilities`, `init agents` | nothing | all local data |
 
@@ -91,8 +92,11 @@ everyone and four concurrent requests. Spent free budget or TypeSafe credits pro
 `quota_exhausted` (exit 4), never retried. A per-request spending limit produces
 `input_too_large` (exit 6). A late failure can leave a prefix on human stdout.
 
-The Claude Code failure hook sends the failed Bash output it receives through `why` and can
-save the raw input by the same rules. Claude Code can truncate that output. The GitHub Action
+The MCP server (`jevify mcp`) runs the same verbs in process for the client that launched it:
+each call sends its own evidence, loads its own configuration from the environment, and the
+`why` tool saves raw input by the verb's rules. Only JSON-RPC leaves on stdout; diagnostics go
+to stderr, which the client may show or discard. The Claude Code failure hook sends the failed
+Bash output it receives through `why` and can save the raw input by the same rules. Claude Code can truncate that output. The GitHub Action
 sends the specified log through `why --no-save` and writes the chosen context to the job
 summary; that summary has the workflow's visibility. `health` consumes a small classification
 to verify usability, so it can detect quota or credit exhaustion.

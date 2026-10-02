@@ -45,7 +45,8 @@ pub fn capabilities() -> Outcome {
             {"name":"add", "usage":"jevify add [--dry-run | --yes] <topic...>", "exit":[0,2,3,6,130], "data":"hunks[{file,header,p,staged}]"},
             {"name":"capabilities", "usage":"jevify capabilities --json", "exit":[0], "data":"commands, kinds, exit_codes, error_kinds, env, envelope"},
             {"name":"health", "usage":"jevify health --json", "exit":[0,4,5], "data":"backend, base_url, key, key_url, api, latency_ms, model"},
-            {"name":"init", "usage":"jevify init agents", "exit":[0], "data":"script"}
+            {"name":"init", "usage":"jevify init agents", "exit":[0], "data":"script"},
+            {"name":"mcp", "usage":"jevify mcp", "exit":[0], "data":"stdio MCP server: tools why {path | text}, is {statement, context | context_path}, pick {description, items | from_kind, cwd}; each result carries this envelope as structuredContent", "example":"claude mcp add jevify -- jevify mcp"}
         ],
         "common_exit":[2,4,5,6],
         "exit_codes":exit_codes,

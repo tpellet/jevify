@@ -6,5 +6,11 @@
     "url": "https://github.com/tpellet"
   },
   "homepage": "https://github.com/tpellet/jevify",
-  "license": "MIT"
+  "license": "MIT",
+  "mcpServers": {
+    "jevify": {
+      "command": "jevify",
+      "args": ["mcp"]
+    }
+  }
 }

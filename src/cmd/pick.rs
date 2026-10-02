@@ -33,7 +33,6 @@ pub async fn run(
             "--index numbers stdin lines; with --files the match is a path".into(),
         ));
     }
-    let client = Client::new(ctx)?;
     let read = tokio::task::spawn_blocking(crate::input::read_stdin_bytes)
         .await
         .map_err(|e| JevifyError::Input(e.to_string()))?;
@@ -48,6 +47,21 @@ pub async fn run(
         }
         other => (other?, split),
     };
+    rank(ctx, intent, top, index, split, files, bytes).await
+}
+
+/// Ranks the records of `bytes` against `intent`: what `run` does once stdin is read, and
+/// what the MCP tool calls with its supplied items.
+pub async fn rank(
+    ctx: &Config,
+    intent: &str,
+    top: usize,
+    index: bool,
+    split: Split,
+    files: bool,
+    bytes: Vec<u8>,
+) -> Result<Outcome, JevifyError> {
+    let client = Client::new(ctx)?;
     let records = records::parse(&bytes, split)?;
     if records.is_empty() {
         return Err(JevifyError::EmptyInput("stdin was empty"));
@@ -236,7 +250,8 @@ pub async fn run(
     })
 }
 
-async fn from_kind(
+/// `pick --from KIND`: the kind's own listing as candidates. The MCP tool calls it directly.
+pub async fn from_kind(
     ctx: &Config,
     intent: &str,
     top: usize,

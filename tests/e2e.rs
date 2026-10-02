@@ -901,3 +901,84 @@ fn end_to_end_on_classifier() {
     }
     run_suite("classifier");
 }
+
+/// `why` over MCP on a gold log: `jevify mcp` on the live TypeSafe backend, the legacy
+/// handshake, then one `tools/call` naming `evals/why/go-01.log` by path. The cause line in
+/// `structuredContent` must fall inside the gold range, as in the stdin case `why-go-01`.
+#[test]
+#[ignore]
+fn why_over_mcp_on_typesafe() {
+    assert!(
+        std::env::var_os("TYPESAFE_API_KEY").is_some()
+            || std::env::var_os("TYPESAFE_API_KEY_FILE").is_some(),
+        "NOT RUN: set TYPESAFE_API_KEY_FILE=/path/to/key (or TYPESAFE_API_KEY)"
+    );
+    let started = Instant::now();
+    let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let tmp = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
+    let log = repo.join("evals/why/go-01.log");
+    let input = std::fs::read_to_string(&log).unwrap();
+    let (lo, hi) = cause_range(&Expect::Cause("go-01"), &input, &repo).unwrap();
+    let messages = [
+        serde_json::json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": "e2e", "version": "0"}}}),
+        serde_json::json!({"jsonrpc": "2.0", "method": "notifications/initialized"}),
+        serde_json::json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "why", "arguments": {"path": log.to_str().unwrap()}}}),
+    ];
+    let stdin: String = messages.iter().map(|m| format!("{m}\n")).collect();
+    let mut cmd = assert_cmd::Command::cargo_bin("jevify").unwrap();
+    for (key, _) in std::env::vars_os() {
+        if key.to_string_lossy().starts_with("JEVIFY_") {
+            cmd.env_remove(key);
+        }
+    }
+    let out = cmd
+        .current_dir(&repo)
+        .env("JEVIFY_BACKEND", "typesafe")
+        .env("JEVIFY_NO_CACHE", "1")
+        .env("JEVIFY_NO_SAVE", "1")
+        .env("JEVIFY_CACHE_DIR", tmp.join("e2e-mcp-cache"))
+        .env("JEVIFY_CONFIG_DIR", tmp.join("e2e-mcp-config"))
+        .timeout(Duration::from_secs(300))
+        .arg("mcp")
+        .write_stdin(stdin)
+        .output()
+        .unwrap();
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let replies: Vec<Value> = String::from_utf8(out.stdout)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).expect("nothing but JSON-RPC on stdout"))
+        .collect();
+    assert_eq!(replies.len(), 2, "{replies:?}");
+    assert_eq!(replies[0]["result"]["protocolVersion"], "2025-11-25");
+    let result = &replies[1]["result"];
+    let envelope = &result["structuredContent"];
+    assert!(
+        !matches!(envelope["exit_code"].as_i64(), Some(4 | 5)),
+        "backend unavailable, nothing proved: {envelope}"
+    );
+    assert_eq!(result["isError"], false, "{result}");
+    assert_eq!(envelope["command"], "why");
+    assert_eq!(envelope["meta"]["backend"], "typesafe");
+    assert!(
+        jevify::jev::all_jev(envelope["meta"]["model"].as_str().unwrap_or("")),
+        "{envelope}"
+    );
+    assert_eq!(envelope["exit_code"], 0, "{envelope}");
+    let cause = &envelope["data"]["causes"][0];
+    let line = cause["line"].as_u64().unwrap() as usize;
+    assert!(
+        (lo..=hi).contains(&line),
+        "line {line} outside the gold range {lo}..={hi}: {cause}"
+    );
+    eprintln!(
+        "PASS  why-mcp-go-01          {:>5.1}s  exit 0 line {line} ({:.2}) in {lo}..={hi}",
+        started.elapsed().as_secs_f64(),
+        cause["p"].as_f64().unwrap_or(0.0)
+    );
+}

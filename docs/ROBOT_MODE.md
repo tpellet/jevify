@@ -201,3 +201,51 @@ Answer-cache values contain model names and decisions, not evidence; keys hash r
 requests. Entries are ignored after seven days, without deleting files. Tool inventory files
 hold PATH names and summaries without expiry, and are written under an explicit
 `JEVIFY_CACHE_DIR` even with `--no-cache`. Neither diagnostics nor telemetry prints credentials.
+
+## The MCP server
+
+`jevify mcp` serves `why`, `is` and `pick` as MCP tools over stdio: JSON-RPC 2.0, one message
+per line, nothing but protocol messages on stdout, diagnostics on stderr. It exits when stdin
+closes. It answers the `initialize` handshake of protocol revision 2025-11-25 (earlier known
+revisions are echoed), `server/discover` and the per-request `_meta` of revision 2026-07-28,
+`ping`, `tools/list` and `tools/call`; an unsupported `_meta` version is error `-32022` with the
+supported list. Every call loads its configuration from the environment the client gave the
+process (`TYPESAFE_API_KEY_FILE`, `JEVIFY_*`) and reports its own `meta`.
+
+| Tool | Arguments | Runs |
+|:---|:---|:---|
+| `why` | `path` or `text`, one of the two | `why -C 3 -n 1` on the log; saves raw input by the verb's rules |
+| `is` | `statement`; `context` or `context_path`, one of the two | `is` with the default band |
+| `pick` | `description`; `items` (strings) or `from_kind` (`commit`, `branch`, `file`, `tool`, `pr`, `run`) with an optional `cwd` | `pick` on the items, or `pick --from` in `cwd`; selects only, starts no command |
+
+A result carries the [envelope](#one-envelope) as `structuredContent` and one short text
+(`line 155: …`, `yes (p 0.91)`, the chosen item). Branch on `structuredContent.exit_code`
+exactly as on the process exit code: 0 found or yes, 1 no, 3 nothing fits or unsure, with
+`data.shortlist` naming the nearest candidates, which are not answers. An abstention is a
+plain result, never `isError`. A jevify error (`usage`, `bad_api_key`, `quota_exhausted`,
+`empty_input`, …) is a tool execution error: `isError: true`, the text `kind: message; hint`,
+and the envelope with `error.kind` and `exit_code`. Unknown tools, missing or malformed
+parameters and unknown methods are JSON-RPC errors (`-32602`, `-32601`); malformed JSON is
+`-32700`.
+
+Claude Code, through the plugin's `mcpServers` or by hand:
+
+```sh
+claude mcp add jevify -- jevify mcp
+```
+
+Codex, in `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.jevify]
+command = "jevify"
+args = ["mcp"]
+
+[mcp_servers.jevify.env]
+TYPESAFE_API_KEY_FILE = "/path/to/key"
+```
+
+Claude Desktop installs the bundle built from `packaging/mcpb/manifest.json` with the
+`jevify` binary at `server/jevify` inside it (`mcpb pack`); its one setting is the key file
+path, blank for keyless use. A desktop client launches the server in a directory of its own,
+so `pick` with `from_kind` names the repository in `cwd`.

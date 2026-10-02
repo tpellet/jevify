@@ -222,6 +222,11 @@ pub enum Cmd {
         /// The block to print; agents prints instructions for coding agents
         shell: Shell,
     },
+    /// Serve why, is and pick as MCP tools over stdio (JSON-RPC, one message per line)
+    #[command(
+        after_help = "Example:\n  claude mcp add jevify -- jevify mcp\n\nReads JSON-RPC 2.0 requests on stdin and writes responses on stdout, one per line; logs go to stderr. Tools: why {path | text}, is {statement, context | context_path}, pick {description, items | from_kind, cwd}; pick selects and runs nothing. Each result carries the --json envelope as structuredContent. Exits 0 when stdin closes."
+    )]
+    Mcp,
 }
 
 /// A free-text argument as the caller wrote it, quoted as one word or left as several: the

@@ -1,0 +1,55 @@
+{
+  "manifest_version": "0.3",
+  "name": "jevify",
+  "display_name": "jevify",
+  "version": "0.14.2",
+  "description": "Find the line that explains a failure, check a statement against a text, or pick the item a description means. Selects, never generates.",
+  "long_description": "jevify points at the right thing among real things, with a confidence score and an honest \"nothing fits\". Tools: `why` (the root-cause line of a failed build, test or CI log, from a path or the text), `is` (a yes, no or unsure verdict on one statement about a text) and `pick` (the one item a description means, among supplied items or the commits, branches, files, PRs, CI runs or installed tools of a directory). `pick` selects and starts no command. Every result carries jevify's JSON envelope as structuredContent; exit_code 3 is an abstention with the nearest candidates in data.shortlist. Without a key, jevify answers through classifier.dev's free budget; a TypeSafe key file uses your own quota. Evidence leaves the machine; see PRIVACY.md.",
+  "author": {
+    "name": "Thomas Pellet",
+    "url": "https://github.com/tpellet"
+  },
+  "homepage": "https://github.com/tpellet/jevify",
+  "documentation": "https://github.com/tpellet/jevify/blob/main/docs/ROBOT_MODE.md",
+  "support": "https://github.com/tpellet/jevify/issues",
+  "license": "MIT",
+  "keywords": ["cli", "logs", "ci", "semantic-search", "jev", "typesafe"],
+  "privacy_policies": ["https://github.com/tpellet/jevify/blob/main/PRIVACY.md"],
+  "server": {
+    "type": "binary",
+    "entry_point": "server/jevify",
+    "mcp_config": {
+      "command": "${__dirname}/server/jevify",
+      "args": ["mcp"],
+      "env": {
+        "TYPESAFE_API_KEY_FILE": "${user_config.key_file}"
+      }
+    }
+  },
+  "tools": [
+    {
+      "name": "why",
+      "description": "Point at the line that states the root cause in a failed build, test or CI log, from a path or the text."
+    },
+    {
+      "name": "is",
+      "description": "Answer yes, no or unsure to one literal statement about a text."
+    },
+    {
+      "name": "pick",
+      "description": "Select the one item a description means, among supplied items or the real commits, branches, files, PRs, CI runs or installed tools of a directory; selects only."
+    }
+  ],
+  "user_config": {
+    "key_file": {
+      "type": "file",
+      "title": "TypeSafe key file",
+      "description": "A file holding your TypeSafe API key, read by jevify and never printed. Leave it empty to run keyless through classifier.dev's free budget.",
+      "required": false
+    }
+  },
+  "compatibility": {
+    "claude_desktop": ">=0.10.0",
+    "platforms": ["darwin", "linux"]
+  }
+}

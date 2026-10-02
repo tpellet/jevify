@@ -25,7 +25,7 @@ use std::ffi::OsString;
 use std::io::Write;
 use std::time::Instant;
 
-const VERBS: [&str; 10] = [
+const VERBS: [&str; 11] = [
     "fill",
     "pick",
     "why",
@@ -36,6 +36,7 @@ const VERBS: [&str; 10] = [
     "capabilities",
     "health",
     "init",
+    "mcp",
 ];
 
 /// What bare `jevify` prints: enough to make a first call, in about 130 tokens. `--help` has the rest.
@@ -198,6 +199,7 @@ fn command_name(cmd: &Cmd) -> &'static str {
         Cmd::Capabilities => "capabilities",
         Cmd::Health => "health",
         Cmd::Init { .. } => "init",
+        Cmd::Mcp => "mcp",
     }
 }
 
@@ -533,6 +535,7 @@ async fn dispatch(cli: &Cli, ctx: &config::Config) -> Result<cmd::Outcome, Jevif
         Cmd::Capabilities => Ok(cmd::agent::capabilities()),
         Cmd::Health => cmd::agent::health(ctx).await,
         Cmd::Init { shell } => Ok(cmd::agent::init(*shell)),
+        Cmd::Mcp => cmd::mcp::serve(&cli.g).await,
     }
 }
 
