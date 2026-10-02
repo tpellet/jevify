@@ -521,6 +521,80 @@ async fn a_tie_none_or_a_no_below_threshold_runs_nothing() {
     assert_eq!(envelope(&out, 3)["data"]["reason"], "ambiguous");
 }
 
+/// On exit 3, `data.shortlist` lists the nearest candidates of the marker `data.reason` names,
+/// in `pick`'s shape (`[{text, p}]`, best first), and is an empty list, never null, when that
+/// marker scored nothing. Each marker carries its own under `data.markers[].shortlist`.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_abstention_lists_the_nearest_candidates_or_an_empty_list() {
+    // (P(any), probabilities of L000, L001 and NONE, reason, shortlist)
+    for (noul, choice, reason, shortlist) in [
+        (
+            0.9,
+            [0.2, 0.1, 0.7],
+            "no_match",
+            json!([{"text": "a", "p": 0.2}, {"text": "b", "p": 0.1}]),
+        ),
+        (
+            0.9,
+            [0.45, 0.45, 0.1],
+            "ambiguous",
+            json!([{"text": "a", "p": 0.45}, {"text": "b", "p": 0.45}]),
+        ),
+        (
+            0.1,
+            [0.9, 0.05, 0.05],
+            "no_match",
+            json!([{"text": "a", "p": 0.9}, {"text": "b", "p": 0.05}]),
+        ),
+    ] {
+        let server = common::mock(fixed(Some("jev-fake"), noul, choice)).await;
+        let out = dry_run(common::jevify(&server), &["printf", "@{-:x}"], "a\nb\n");
+        let value = envelope(&out, 3);
+        assert_eq!(value["data"]["reason"], reason);
+        assert_eq!(value["data"]["shortlist"], shortlist, "{reason}");
+        assert_eq!(value["data"]["markers"][0]["shortlist"], shortlist);
+    }
+    // The first abstaining marker's list is the top-level one; an unsure flag scored no
+    // candidate and lists none.
+    let server = common::mock(fixed(Some("jev-fake"), 0.5, [0.2, 0.1, 0.7])).await;
+    let context = tempfile::tempdir().unwrap().keep().join("context");
+    std::fs::write(&context, "text").unwrap();
+    let mut cmd = common::jevify(&server);
+    cmd.args(["fill", "--dry-run", "--json", "--context"])
+        .arg(&context);
+    let argv = ["--", "printf", "@{-:x}", "@{flag:--draft:uncertain}"];
+    let value = envelope(&run(cmd, &argv, "a\nb\n"), 3);
+    assert_eq!(value["data"]["reason"], "no_match");
+    assert_eq!(value["data"]["shortlist"][0]["text"], "a");
+    assert_eq!(value["data"]["markers"][1]["reason"], "unsure_flag");
+    assert_eq!(value["data"]["markers"][1]["shortlist"], json!([]));
+    // Nothing to score: an empty listing, an oversized context, a lone unsure flag.
+    let dir = branch_fixture(0);
+    for (marker, input) in [
+        ("@{-:x}", String::new()),
+        ("@{branch:x}", String::new()),
+        ("@{one:x|y:x}", "x".repeat(96_001)),
+        ("@{flag:--draft:uncertain}", "context".into()),
+    ] {
+        let command = fixture_command(common::jevify(&server), &dir);
+        let value = envelope(&dry_run(command, &["printf", marker], input), 3);
+        assert_eq!(value["data"]["shortlist"], json!([]), "{marker}");
+        assert_eq!(
+            value["data"]["markers"][0]["shortlist"],
+            json!([]),
+            "{marker}"
+        );
+    }
+    // A resolved command carries no shortlist: candidates are not answers, and there was one.
+    let server = common::mock(fake()).await;
+    let value = envelope(
+        &dry_run(common::jevify(&server), &["printf", "@{-:x}"], "a\n"),
+        0,
+    );
+    assert!(value["data"]["shortlist"].is_null());
+    assert!(value["data"]["markers"][0]["shortlist"].is_null());
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn a_lister_that_leaves_its_pipe_open_fails_without_a_request() {
     let server = common::mock(fake()).await;

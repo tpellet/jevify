@@ -528,6 +528,17 @@ struct State {
     reason: Option<&'static str>,
     p: Option<f64>,
     detail: String,
+    /// The nearest candidates of an abstention, best first: `data.shortlist`'s entries, in
+    /// `pick`'s shape. Empty when nothing was scored.
+    closest: Vec<(String, f64)>,
+}
+
+/// `data.shortlist` of an abstention: `[{text, p}]`, best first.
+fn shortlist_json(closest: &[(String, f64)]) -> serde_json::Value {
+    closest
+        .iter()
+        .map(|(text, p)| json!({ "text": text, "p": p }))
+        .collect()
 }
 
 impl State {
@@ -594,6 +605,10 @@ fn names_may_decide(kind: &str) -> bool {
 }
 
 fn apply_ranking(state: &mut State, ranking: &Ranking, threshold: f64) {
+    // Emitted only on an abstention, the duplicate-evidence one included.
+    state.closest = super::closest(ranking, |i| {
+        state.records[i].handle.to_string_lossy().into_owned()
+    });
     match tournament::decide(ranking, threshold) {
         Decision::Found(best) => {
             let record = &state.records[best.index];
@@ -869,8 +884,14 @@ fn finish(
         "arg": m.argv_index + 1, "kind": m.kind, "reason": s.reason,
         "handle": s.handle.as_ref().map(|h| h.to_string_lossy()), "p": s.p,
         "candidates": s.records.len(), "total": s.total, "omitted": s.omitted,
+        "shortlist": s.reason.map(|_| shortlist_json(&s.closest)),
     })).collect::<Vec<_>>()});
     if reason.is_some() {
+        // The nearest candidates of the marker `reason` names: a list on every abstention,
+        // empty when that marker scored nothing (no listing, an unsure flag, an oversized
+        // context). Candidates are not answers.
+        let first = states.iter().find(|s| s.reason.is_some()).unwrap();
+        data["shortlist"] = shortlist_json(&first.closest);
         return Ok(Outcome {
             exit: Exit::Abstain,
             data,
