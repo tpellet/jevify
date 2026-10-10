@@ -1,27 +1,33 @@
 # jevify
 
-Point at the line that explains a failed build, test or CI run, and put the test, branch,
-commit or PR you can describe but cannot name into the command you were about to run.
+jevify is a command-line tool for finding errors in long logs and finding existing tests,
+commits and PRs by description.
+
+Give it the output of a failed command, and it points at a diagnostic with the surrounding
+lines. Describe the test you want to run, and it finds the test's name. You can use it in a
+shell pipeline or give it to a coding agent.
+
+You choose the command. jevify chooses among existing lines and identifiers, reports
+confidence scores, and can answer that nothing fits.
 
 [![CI](https://github.com/tpellet/jevify/actions/workflows/ci.yml/badge.svg)](https://github.com/tpellet/jevify/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/jevify)](https://crates.io/crates/jevify)
+
+[Guide](docs/guide/README.md) · [Agent interface](docs/ROBOT_MODE.md) · [Privacy](PRIVACY.md)
+
+## Find the error in a failed command
+
+The useful error can be thousands of lines above the final “build failed”. Pipe the full
+output to `why`:
 
 ```sh
 gh run view <id> --log-failed | jevify why
 ```
 
-**Root cause first in 30 of 34 failed GitHub Actions runs, where `grep | tail` finds it in 11.**
-TypeSafe backend, 2026-09-28, 34 runs from 30 public repositories; `why` points at a wrong line
-in the other four and never abstains on these, so a pointer is something to check.
-[Cases, method and baselines](benchmarks/why-ci.md).
-
-On the repository's failed-build fixture, 1,812 lines with one error under 300 warnings, on the
-keyless backend (`windows 13` is the keyless window count; TypeSafe uses larger windows):
+In this repository's build fixture, one error is buried under 300 warnings in 1,812 lines:
 
 ```console
 $ jevify why < docs/demo/build.log
-jevify why: full output: ~/Library/Caches/jevify/outputs/1a419395094f905c.log
-jevify why: 1812 lines, candidates 1212, windows 13
       1 │    Compiling buildfail v0.1.0 (benchmarks/fixtures/demo/buildfail)
 >     2 │ error[E0425]: cannot find value `conifg` in this scope
       3 │    --> src/main.rs:306:20
@@ -29,37 +35,45 @@ jevify why: 1812 lines, candidates 1212, windows 13
       5 │ 306 |     println!("{}", conifg);
 ```
 
-For a local build, pipe stderr too: `cargo test 2>&1 | jevify why`. The full log stays on disk
-for seven days; `--no-save` skips that copy.
+For a local test run, include stderr: `cargo test 2>&1 | jevify why`. The full log stays on
+disk for seven days, and jevify prints its path on stderr. `--no-save` skips that copy.
+
+On 34 failed GitHub Actions runs from 30 public repositories, `why` selected the labelled
+diagnostic first in **30 runs**. A `grep | tail -n 5` baseline kept a diagnostic somewhere in
+its five lines in **11 runs** (TypeSafe, 2026-09-28). `why` selected a wrong line in the other
+four and abstained in none. Read the selected lines and their context before deciding what
+to fix. [Cases, method and baselines](benchmarks/why-ci.md).
 
 ## Install
 
-On macOS or Linux, no Rust needed:
+Install on macOS or Linux:
 
 ```sh
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/tpellet/jevify/releases/latest/download/jevify-installer.sh | sh
 ```
 
-Or with Rust 1.87 or later: `cargo install jevify --locked`. No account needed to try it
-([free tier](#free-tier-and-keys)).
+Or use Rust 1.87 or later: `cargo install jevify --locked`. You can try it without an account
+using the [free tier](#free-tier-and-keys).
 
 ## Run the test you mean
 
-Write the command; where an ID goes, describe it in `@{…}`; jevify puts in the real ID, or runs
-nothing. The test runner's own listing supplies the names, TypeSafe backend:
+You remember what a test checks, but not its name. List the tests and put the description
+where the name belongs, inside `@{…}`. `fill --dry-run` shows the command with the selected
+name. In this repository, using TypeSafe:
 
 ```console
 $ cargo test -- --list 2>/dev/null | sed -n 's/: test$//p' | jevify fill --dry-run -- cargo test '@{-:a 429 response is retried and the answer is cached}' -- --exact
-jevify fill: - a_429_is_retried_and_the_answer_is_cached 1.00 (next 0.00, none 0.00); candidates 207, windows 2; model jev-1.13.0
-jevify fill: would run 'cargo' 'test' 'a_429_is_retried_and_the_answer_is_cached' '--' '--exact'
 'cargo' 'test' 'a_429_is_retried_and_the_answer_is_cached' '--' '--exact'
 ```
 
-Omit `--dry-run` and that one test runs. On 50 behaviours written against two repositories'
-test listings, `fill` runs the right test for 43 of the 45 that have one, abstains on the other
-two and on all 5 that have none, and never runs a wrong one
-([gold set and pytest, go recipes](benchmarks/test-by-behaviour.md)). The same marker takes
-things a tool can list:
+Omit `--dry-run` to run that test. On 50 descriptions checked against two repositories'
+test listings, `fill --dry-run` selected the expected test for **43 of the 45** that had one.
+It abstained on the other two and on all five descriptions with no matching test, and selected
+no wrong test (TypeSafe, 2026-10-02). [Gold set, pytest and Go recipes](benchmarks/test-by-behaviour.md).
+
+## Find a branch, commit or PR by description
+
+Use the same marker in a command that needs a branch name, commit hash or PR number:
 
 ```sh
 jevify fill -- git switch '@{branch:the auth refactor}'
@@ -67,19 +81,39 @@ jevify fill -- git show '@{commit:fixes retry backoff}'
 jevify fill -- gh pr checkout '@{pr:keeps the grid aligned when a tab follows a multibyte character}'
 ```
 
-The branch and commit lines are placeholders for your own repository. The PR line, in a
-checkout of [sharkdp/bat](https://github.com/sharkdp/bat), resolves to `gh pr checkout 4018`
-among 1,000 open and closed PRs (TypeSafe, 2026-09-28). On 20 such requests across three
-repositories, 17 come out right (16 handles and one correct refusal), 2 abstain with an answer
-available, and none resolves to a wrong handle ([sample](benchmarks/fill-sample.md)).
+Use descriptions that fit your repository. The PR example, in a checkout of
+[sharkdp/bat](https://github.com/sharkdp/bat), resolves to `gh pr checkout 4018` among 1,000
+open and closed PRs (TypeSafe, 2026-09-28). More [selection cases](benchmarks/fill-sample.md)
+cover commits, branches, files and supplied CI runs across three repositories.
 
-Keep the whole marker argument in single quotes. Inspect `--dry-run`; never `eval` it. If
-nothing fits or two candidates are too close, `fill` exits **3 and nothing runs**, with the
-nearest candidates in `data.shortlist`. Several markers resolve together; any failure stops them
-all. [Kinds and supplied lists](docs/guide/kinds.md) cover files, PRs, CI runs, pods and your
-own recipes.
+Keep each marker argument in single quotes. Use `--dry-run` to inspect the selected identifier;
+`fill` executes the command directly, without a shell. If nothing fits or the choice is
+ambiguous, it exits **3 and runs nothing**. The nearest candidates are in `data.shortlist`.
+When a command has several markers, all must resolve before it runs.
 
-## In your agent
+[Kinds and supplied lists](docs/guide/kinds.md) cover files, CI runs, pods and your own
+recipes. File selection uses names and content excerpts; it can confidently choose the wrong
+file. Check the path with `--dry-run` before running a command that changes it.
+
+## Check a claim against the output
+
+After reading a log, you or an agent may want to check a statement about it. `is` answers
+whether the supplied text establishes that statement. Its exit code works with `&&` or `if`:
+
+```sh
+jevify is 'the failure is in TestSqlUpdate' --context evals/why/go-01.log && echo established
+```
+
+On 20 claims checked against 11 real logs, `is` agreed with all 20 labels and gave no false
+yes to a claim the log contradicted or left open (TypeSafe, 2026-10-01,
+[claim check](benchmarks/claim-check.md)). A yes means the text establishes the claim. A no
+means it does not establish it; the claim may still be true.
+
+## Use jevify with a coding agent
+
+The CLI works through an agent's shell. A failure hook can add the selected diagnostic after
+a failed command, and the MCP server lets an agent call `why`, `is` and `pick` directly.
+You still decide which commands the agent may run.
 
 ### Claude Code
 
@@ -91,31 +125,32 @@ Install the CLI above, then in Claude Code:
 # Restart Claude Code to load the plugin.
 ```
 
-The plugin's `PostToolUseFailure` hook on Bash is the one command `jevify why --hook claude`:
-it reads the hook payload, and when the failed output has at least 80 lines it supplies the
-pointed line, with context and the saved-output path, beside the error. It adds nothing on a
-short output, an abstention or a timeout, and never blocks the tool call. Claude Code can
-truncate the failed output; pipe the full log to `why` when the cause is in the missing middle.
+The plugin runs `jevify why --hook claude` after a failed Bash command. When the output has at
+least 80 lines, the hook adds the selected diagnostic, context and saved-log path beside the
+error. It stays silent on short output, abstention or timeout and never blocks the tool call.
+Claude Code can truncate failed output; pipe the full log to `why` when the error is in the
+missing middle.
+
 The plugin also registers the [MCP server](#mcp-server) and the
 [skill](plugins/jevify/skills/jevify/SKILL.md).
 
 ### Codex
 
-Codex has `PostToolUse` and the same hook shape. In `~/.codex/hooks.json`, or
-`.codex/hooks.json` in the repository:
+Add a [`PostToolUse` hook](https://developers.openai.com/codex/hooks) in
+`~/.codex/hooks.json`, or `.codex/hooks.json` in the repository:
 
 ```json
 {"hooks": {"PostToolUse": [{"matcher": "Bash",
   "hooks": [{"type": "command", "command": "jevify why --hook codex", "timeout": 30}]}]}}
 ```
 
-`--hook codex` prints nothing when the command succeeded. The skill works in Codex when copied
-into `~/.agents/skills/`.
+The hook stays silent on successful commands. You can also copy the
+[skill](plugins/jevify/skills/jevify/SKILL.md) into `~/.agents/skills/`.
 
 ### MCP server
 
-`jevify mcp` serves `why`, `is` and `pick` as MCP tools over stdio; an abstention is a plain
-result with the nearest candidates in `data.shortlist`, never an error.
+`jevify mcp` exposes `why`, `is` and `pick` over stdio. When nothing fits, the agent receives
+an abstention result with the nearest candidates in `data.shortlist`.
 
 ```sh
 claude mcp add jevify -- jevify mcp
@@ -150,38 +185,25 @@ action after a failure, replacing `<tag>` with a release tag containing it:
     classes: compile|test|flaky|infra
 ```
 
-The action installs jevify and writes the cause to the job summary; abstention leaves the
-summary alone. `classes` sorts the failure from the lines `why` printed: on the 34 benchmark
-runs, 26 land in the hand-labelled class, 4 abstain and 4 are wrong
-([triage](benchmarks/why-triage.md)).
+The action installs jevify and writes the selected diagnostic to the job summary. It leaves
+the summary alone when `why` abstains. With `classes`, it also classifies the failure using
+the selected lines. On the 34 benchmark runs, 26 match the hand-labelled class, 4 abstain and
+4 are wrong (TypeSafe, 2026-10-02, [triage](benchmarks/why-triage.md)).
 
-## Check a claim
-
-`is` answers whether a text establishes a statement, as an exit code for `&&` or `if`:
-
-```sh
-jevify is 'the failure is in TestSqlUpdate' --context evals/why/go-01.log && echo established
-```
-
-On 20 claims an agent writes after a run, against 11 real logs, `is` answers 20 of 20 with no
-false yes on a claim the log contradicts or leaves open (TypeSafe, 2026-10-01,
-[claim check](benchmarks/claim-check.md)). Yes means the log establishes the claim; no means
-act as if it did not.
-
-## Other verbs
+## Work with lists and changes
 
 | Need | Command |
 |:---|:---|
-| One record by description | `jevify pick 'what I paid a streaming service' < lines` |
-| The handle alone, no command | `jevify pick --from branch 'the auth refactor'`; also `commit`, `file`, `pr`, `ci-run`, `tool` |
+| Get a branch name | `jevify pick --from branch 'the auth refactor'`; also `commit`, `file`, `pr`, `ci-run`, `tool` |
 | Records where a statement holds | `jevify filter 'reports a crash' < lines`; `--strict` drops unsure records |
 | A bucket for each record | `jevify filter --label bug,feature,question < lines` prints `LABEL<TAB>RECORD` |
-| Several facts at once | `jevify is 'asks for a refund' 'mentions an order' --context mail.txt` |
+| Check several claims | `jevify is 'the failure is in TestSqlUpdate' 'the failure is in TestSqlInsert' --context evals/why/go-01.log` |
 | Stage one topic's hunks | `jevify add --dry-run 'the token expiry fix'`; `--yes` stages |
 
 `pick` and `filter` preserve record bytes and input order. `-0` reads NUL-separated records;
 `--para` reads paragraphs; `--files` judges a list of paths by their content.
-[Every verb](docs/guide/verbs.md).
+Use `grep`, `rg`, `jq` or `awk` when you know the exact text or field you need. Use jevify when
+you can describe the match but need it to judge the meaning. [Every verb](docs/guide/verbs.md).
 
 ## Exit codes and errors
 
@@ -217,18 +239,18 @@ machine. A call is one or two rounds of requests; a repeated question answers fr
 
 ## Free tier and keys
 
-Without a key, jevify asks [classifier.dev](https://classifier.dev), which serves Jev free and
-without an account: $0.50 per IP per UTC day, shared by everyone behind that IP, subject to
-$100 per day across everyone and four concurrent requests. It is for trying jevify; CI and
-teams need a TypeSafe key from <https://console.typesafe.ai/keys>:
+Without a key, jevify asks [classifier.dev](https://classifier.dev/developers), which serves
+Jev without an account. The free allowance is $0.50 per IP per UTC day, shared by everyone
+behind that IP, subject to $100 per day across everyone and four concurrent requests.
+For CI or regular use, get a TypeSafe key from <https://console.typesafe.ai/keys>:
 
 ```sh
 export TYPESAFE_API_KEY_FILE=/path/to/key
 ```
 
-A spent budget is `quota_exhausted` (exit 4), not an invitation to retry. `jevify health`
-checks the backend. The two backends give the same verbs and exit codes; their scores are not on
-the same scale.
+When the budget is spent, jevify reports `quota_exhausted` (exit 4). Wait for the daily reset
+or use a TypeSafe key. `jevify health` checks the backend. Both backends support the same verbs
+and exit codes, with different score scales.
 
 ## For agents
 
